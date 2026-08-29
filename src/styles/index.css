@@ -84,17 +84,17 @@
   --primary-bg: rgba(139, 131, 255, 0.12);
   --primary-bg-hover: rgba(139, 131, 255, 0.2);
 
-  --income: #34D399;
-  --income-light: #6EE7B7;
-  --income-dark: #10B981;
-  --income-bg: rgba(52, 211, 153, 0.12);
-  --income-bg-solid: #064E3B;
+  --income: #10B981;
+  --income-light: #34D399;
+  --income-dark: #059669;
+  --income-bg: rgba(16, 185, 129, 0.12);
+  --income-bg-solid: rgba(16, 185, 129, 0.18);
 
-  --expense: #F87171;
-  --expense-light: #FCA5A5;
-  --expense-dark: #EF4444;
-  --expense-bg: rgba(248, 113, 113, 0.12);
-  --expense-bg-solid: #7F1D1D;
+  --expense: #EF4444;
+  --expense-light: #F87171;
+  --expense-dark: #DC2626;
+  --expense-bg: rgba(239, 68, 68, 0.12);
+  --expense-bg-solid: rgba(239, 68, 68, 0.18);
 
   --warning: #FBBF24;
   --warning-light: #FCD34D;
@@ -104,37 +104,37 @@
   --info-light: #93C5FD;
   --info-bg: rgba(96, 165, 250, 0.12);
 
-  --bg-primary: #0F1117;
-  --bg-secondary: #1A1D2E;
-  --bg-tertiary: #252840;
-  --bg-card: #1E2235;
-  --bg-card-hover: #252840;
-  --bg-input: #252840;
-  --bg-sidebar: #151827;
+  --bg-primary: #090A10;
+  --bg-secondary: #121524;
+  --bg-tertiary: #1D2136;
+  --bg-card: #141727;
+  --bg-card-hover: #1D2136;
+  --bg-input: #1D2136;
+  --bg-sidebar: #0E101D;
 
-  --text-primary: #F1F5F9;
+  --text-primary: #F8FAFC;
   --text-secondary: #94A3B8;
   --text-tertiary: #64748B;
-  --text-inverse: #1A1D2E;
+  --text-inverse: #090A10;
 
-  --border-color: #2D3148;
-  --border-light: #252840;
-  --divider: #2D3148;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.05);
+  --divider: rgba(255, 255, 255, 0.08);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.35);
-  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.2);
-  --shadow-card-hover: 0 8px 25px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.6);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 8px 28px rgba(0, 0, 0, 0.45);
 
-  --glass-bg: rgba(30, 34, 53, 0.8);
-  --glass-border: rgba(45, 49, 72, 0.5);
+  --glass-bg: rgba(20, 23, 39, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.08);
 
-  --gradient-balance: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #9333EA 100%);
-  --gradient-hero: linear-gradient(135deg, #3730A3 0%, #581C87 100%);
+  --gradient-balance: linear-gradient(135deg, #5B4DFF 0%, #7C3AED 50%, #A855F7 100%);
+  --gradient-hero: linear-gradient(135deg, #4338CA 0%, #6D28D9 100%);
 
-  --overlay: rgba(0, 0, 0, 0.6);
+  --overlay: rgba(0, 0, 0, 0.7);
 }
 
 /* ---------- Typography Scale ---------- */

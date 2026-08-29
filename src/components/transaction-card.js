@@ -2,7 +2,7 @@
 // 💰 Money Control V2 — Transaction Card Component
 // ============================================
 
-import { formatCurrency, formatDate, formatTime, getCategoryEmoji, escapeHtml } from '../utils/formatters.js';
+import { formatCurrency, formatDate, formatTime, getRelativeDate, getCategoryEmoji, escapeHtml } from '../utils/formatters.js';
 
 /**
  * Render a single transaction item (INCOME, EXPENSE, TRANSFER)
@@ -22,56 +22,43 @@ export function renderTransactionItem(tx, options = {}) {
     return acc ? acc.name : '';
   };
 
-  let iconEmoji = '💰';
-  let accountLabel = '';
+  let typeBadge = '🔴';
+  let accountName = '';
   let sign = '';
 
   if (isIncome) {
-    iconEmoji = '💰';
+    typeBadge = '🟢';
     sign = '+';
-    const destName = getAccName(tx.destinationAccountId);
-    accountLabel = destName ? `→ ${destName}` : '';
+    accountName = getAccName(tx.destinationAccountId) || 'Account';
   } else if (isExpense) {
-    iconEmoji = getCategoryEmoji(tx.category);
-    sign = '-';
-    const srcName = getAccName(tx.sourceAccountId);
-    accountLabel = srcName ? `← ${srcName}` : '';
+    typeBadge = '🔴';
+    sign = '−';
+    accountName = getAccName(tx.sourceAccountId) || 'Account';
   } else if (isTransfer) {
-    iconEmoji = '🔄';
-    sign = '↔ ';
+    typeBadge = '🟣';
+    sign = '↕';
     const srcName = getAccName(tx.sourceAccountId) || 'Source';
     const destName = getAccName(tx.destinationAccountId) || 'Dest';
-    accountLabel = `${srcName} → ${destName}`;
+    accountName = `${srcName} → ${destName}`;
   }
+
+  const relativeDateStr = getRelativeDate(tx.date);
+  const subtitleStr = `${accountName} • ${relativeDateStr}`;
 
   return `
     <div class="transaction-item animate-fade-in" data-tx-id="${tx.id}">
-      <div class="transaction-icon ${typeClass}">
-        ${iconEmoji}
+      <div class="transaction-type-badge ${typeClass}">
+        ${typeBadge}
       </div>
       <div class="transaction-details">
         <div class="transaction-reason">
-          ${escapeHtml(tx.reason) || (isTransfer ? 'Account Transfer' : 'No reason')}
+          ${escapeHtml(tx.reason) || (isTransfer ? 'Account Transfer' : escapeHtml(tx.category) || 'Transaction')}
         </div>
         <div class="transaction-meta">
-          <span class="transaction-category" style="font-weight: 600; color: ${isTransfer ? 'var(--primary)' : 'var(--text-secondary)'};">
-            ${isTransfer ? '🔄 Transfer' : (escapeHtml(tx.category) || '')}
-          </span>
-          ${accountLabel ? `
-            <span class="transaction-dot"></span>
-            <span style="font-weight: 500; color: var(--text-primary);">${escapeHtml(accountLabel)}</span>
-          ` : ''}
-          ${showDate ? `
-            <span class="transaction-dot"></span>
-            <span>${formatDate(tx.date)}</span>
-          ` : ''}
-          ${tx.createdAt ? `
-            <span class="transaction-dot"></span>
-            <span>${formatTime(tx.createdAt)}</span>
-          ` : ''}
+          <span>${escapeHtml(subtitleStr)}</span>
         </div>
         ${showNotes && tx.notes ? `
-          <div class="transaction-meta" style="margin-top: 4px; font-style: italic;">
+          <div class="transaction-notes-sub">
             ${escapeHtml(tx.notes)}
           </div>
         ` : ''}

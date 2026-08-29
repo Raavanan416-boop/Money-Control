@@ -25,8 +25,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <!-- Import Map for ES Module Specifiers -->
+  <script type="importmap">
+    {
+      "imports": {
+        "firebase/app": "/node_modules/firebase/app/dist/index.mjs",
+        "firebase/auth": "/node_modules/firebase/auth/dist/esm/index.esm.js",
+        "firebase/firestore": "/node_modules/firebase/firestore/dist/index.mjs",
+        "chart.js": "/node_modules/chart.js/auto/auto.js"
+      }
+    }
+  </script>
 
   <!-- App Styles -->
   <link rel="stylesheet" href="/src/styles/index.css" />
@@ -45,6 +54,25 @@
   <div id="pin-lock-root"></div>
   <div id="pwa-install-banner"></div>
   <div id="offline-banner"></div>
-  <script type="module" src="/src/main.js"></script>
+  <!-- Smart Dual Loader: Vite Dev Server + Static HTTP Server (live-server port 4000) fallback -->
+  <script type="module">
+    window.__appLoaded = false;
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        if (!window.__appLoaded) {
+          console.warn('Vite dev server not active. Mounting application bundle...');
+          const script = document.createElement('script');
+          script.type = 'module';
+          script.src = '/dist/assets/app-bundle.js';
+          document.body.appendChild(script);
+        }
+      }, 250);
+    });
+  </script>
+
+  <script type="module">
+    import '/src/main.js';
+    window.__appLoaded = true;
+  </script>
 </body>
 </html>

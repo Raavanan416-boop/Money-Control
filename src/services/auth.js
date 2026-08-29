@@ -19,7 +19,7 @@ import {
 import { auth } from '../config/firebase.js';
 import { createUserProfile, deleteUserData } from './firestore.js';
 
-// Enforce browser local persistence for Firebase Auth
+// Enforce browser local persistence safely without blocking module import
 setPersistence(auth, browserLocalPersistence).catch((err) => {
   console.warn('Firebase setPersistence warning:', err);
 });
@@ -28,27 +28,44 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
  * Register a new user with email/password and create Firestore profile
  */
 export async function register(name, email, password) {
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  const user = userCredential.user;
-
-  // Set display name
-  await firebaseUpdateProfile(user, { displayName: name });
-
-  // Create Firestore user profile
-  await createUserProfile(user.uid, {
-    name,
-    email,
-    createdAt: new Date().toISOString()
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject({ code: 'auth/network-request-failed', message: 'Registration request timed out.' });
+    }, 15000);
   });
 
-  return user;
+  const regPromise = (async () => {
+    const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    const user = userCredential.user;
+
+    // Set display name
+    await firebaseUpdateProfile(user, { displayName: name.trim() });
+
+    // Create Firestore user profile
+    await createUserProfile(user.uid, {
+      name: name.trim(),
+      email: email.trim(),
+      createdAt: new Date().toISOString()
+    });
+
+    return user;
+  })();
+
+  return await Promise.race([regPromise, timeoutPromise]);
 }
 
 /**
- * Login with email/password
+ * Login with email/password (with 15s safety timeout)
  */
 export async function login(email, password) {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject({ code: 'auth/network-request-failed', message: 'Login request timed out.' });
+    }, 15000);
+  });
+
+  const loginPromise = signInWithEmailAndPassword(auth, email.trim(), password);
+  const userCredential = await Promise.race([loginPromise, timeoutPromise]);
   return userCredential.user;
 }
 
@@ -63,7 +80,7 @@ export async function logout() {
  * Send password reset email
  */
 export async function resetPassword(email) {
-  await sendPasswordResetEmail(auth, email);
+  await sendPasswordResetEmail(auth, email.trim());
 }
 
 /**
@@ -86,7 +103,7 @@ export function getCurrentUser() {
 export async function updateUserProfile(name) {
   const user = auth.currentUser;
   if (!user) throw new Error('No user signed in');
-  await firebaseUpdateProfile(user, { displayName: name });
+  await firebaseUpdateProfile(user, { displayName: name.trim() });
 }
 
 /**
@@ -126,20 +143,20 @@ export async function deleteAccount(currentPassword) {
  * Get a user-friendly error message from Firebase errors
  */
 export function getAuthErrorMessage(error) {
-  const code = error.code || '';
+  const code = error?.code || '';
   const messages = {
     'auth/email-already-in-use': 'This email is already registered. Try logging in instead.',
     'auth/invalid-email': 'Please enter a valid email address.',
     'auth/user-disabled': 'This account has been disabled. Contact support.',
-    'auth/user-not-found': 'No account found with this email.',
-    'auth/wrong-password': 'Incorrect password. Please try again.',
-    'auth/invalid-credential': 'Invalid email or password. Please try again.',
-    'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
+    'auth/user-not-found': 'No account found with this email. Click "Create Account" below to register.',
+    'auth/wrong-password': 'Incorrect password. Please check your password or click "Forgot Password?".',
+    'auth/invalid-credential': 'No account found or invalid credentials. If you haven\'t created an account yet, click "Create Account" below.',
+    'auth/too-many-requests': 'Too many failed attempts. Please wait a moment and try again.',
     'auth/weak-password': 'Password should be at least 6 characters.',
-    'auth/network-request-failed': 'Network error. Check your internet connection.',
+    'auth/network-request-failed': 'Network timeout or connection error. Please check your internet connection.',
     'auth/requires-recent-login': 'Please logout and login again before this action.',
     'auth/operation-not-allowed': 'Email/password sign-in is not enabled. Enable it in Firebase Console.',
   };
 
-  return messages[code] || 'Something went wrong. Please try again.';
+  return messages[code] || error?.message || 'Unable to log in. Check your credentials or click "Create Account".';
 }

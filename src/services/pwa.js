@@ -20,13 +20,22 @@ export function initPWA() {
  */
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .catch(() => {
-          // SW registration failed — PWA features won't work
-        });
-    });
+    const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
+    
+    if (isLocalhost) {
+      // Unregister any service workers on localhost to prevent stale dev caching white screens
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let registration of registrations) {
+          registration.unregister();
+        }
+      }).catch(err => console.warn('SW unregister warning:', err));
+    } else {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker
+          .register('/sw.js')
+          .catch(() => {});
+      });
+    }
   }
 }
 

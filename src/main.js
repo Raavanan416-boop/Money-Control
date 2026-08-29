@@ -62,20 +62,28 @@ let autoLockTimer = null;
 
 // Initialize Theme
 function initTheme() {
-  const savedTheme = localStorage.getItem('theme');
-  if (savedTheme) {
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  try {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  } catch (e) {
     document.documentElement.setAttribute('data-theme', 'dark');
-  } else {
-    document.documentElement.setAttribute('data-theme', 'light');
   }
 }
 
 initTheme();
 
 // Initialize PWA
-initPWA();
+try {
+  initPWA();
+} catch (e) {
+  console.warn('PWA initialization warning:', e);
+}
 
 const appEl = document.getElementById('app');
 
@@ -168,17 +176,23 @@ async function loadUserData(uid) {
   appState.dashboardError = null;
 
   try {
-    let profile = await getUserProfile(uid);
+    const profileTimeout = new Promise((resolve) => setTimeout(() => resolve(null), 8000));
+    let profile = await Promise.race([getUserProfile(uid), profileTimeout]);
 
-    // Safely auto-create user profile if missing
+    // Safely auto-create user profile if missing or timed out
     if (!profile) {
       const fallbackName = appState.user?.displayName || appState.user?.email?.split('@')[0] || 'User';
-      await createUserProfile(uid, {
-        name: fallbackName,
-        email: appState.user?.email || '',
-        createdAt: new Date().toISOString()
-      });
-      profile = await getUserProfile(uid);
+      try {
+        await createUserProfile(uid, {
+          name: fallbackName,
+          email: appState.user?.email || '',
+          createdAt: new Date().toISOString()
+        });
+        profile = await getUserProfile(uid);
+      } catch (e) {
+        console.warn('Profile creation fallback:', e);
+        profile = { name: fallbackName, email: appState.user?.email || '', initialBalance: 0 };
+      }
     }
 
     appState.profile = profile;
@@ -190,7 +204,11 @@ async function loadUserData(uid) {
     }
 
     // Ensure default Cash account exists
-    await ensureDefaultAccounts(uid, profile.initialBalance);
+    try {
+      await ensureDefaultAccounts(uid, profile.initialBalance);
+    } catch (e) {
+      console.warn('ensureDefaultAccounts warning:', e);
+    }
 
     // Load Budgets
     try {

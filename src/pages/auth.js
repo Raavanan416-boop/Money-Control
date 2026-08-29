@@ -204,7 +204,11 @@ export function attachAuthListeners(onAuthSuccess) {
         toast.success('Logged in successfully!');
         if (onAuthSuccess) onAuthSuccess();
       } catch (err) {
-        toast.error(getAuthErrorMessage(err));
+        console.error('Login failure:', err);
+        const errMsg = getAuthErrorMessage(err);
+        toast.error(errMsg);
+        const passErr = document.getElementById('login-password-error');
+        if (passErr) passErr.textContent = errMsg;
       } finally {
         const currentBtn = document.getElementById('btn-login-submit');
         if (currentBtn) {

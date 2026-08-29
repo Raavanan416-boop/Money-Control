@@ -119,7 +119,7 @@ export function renderMobileDrawer(activePage, user, profile) {
 }
 
 /**
- * Render mobile bottom navigation (Unchanged)
+ * Render mobile bottom navigation
  */
 export function renderBottomNav(activePage) {
   const items = [
@@ -135,12 +135,18 @@ export function renderBottomNav(activePage) {
       <div class="bottom-nav-items">
         ${items.map(item => {
           if (item.isAdd) {
-            return `<div class="bottom-nav-add" data-action="add" id="mobile-add-btn">➕</div>`;
+            return `
+              <div class="bottom-nav-add-wrapper">
+                <button class="bottom-nav-add" data-action="add" id="mobile-add-btn" aria-label="Quick Actions">
+                  <span>➕</span>
+                </button>
+              </div>
+            `;
           }
           return `
             <div class="bottom-nav-item ${activePage === item.id ? 'active' : ''}" data-page="${item.id}">
               <span class="bottom-nav-item-icon">${item.icon}</span>
-              <span>${item.label}</span>
+              <span class="bottom-nav-item-label">${item.label}</span>
             </div>
           `;
         }).join('')}

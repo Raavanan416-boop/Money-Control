@@ -54,7 +54,7 @@ export function attachOnboardingListeners(userUid, onComplete) {
     errorDiv.textContent = '';
 
     const amount = amountInput.value;
-    const err = validateAmount(amount);
+    const err = validateAmount(amount, true);
     if (err) {
       errorDiv.textContent = err;
       return;

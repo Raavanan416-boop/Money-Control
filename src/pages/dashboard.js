@@ -60,28 +60,26 @@ export function renderDashboardPage(state) {
   }
 
   const userName = profile?.name ? profile.name.split(' ')[0] : 'User';
-  const { balances, totalMoney, totalIncome, totalExpenses, totalTransfers } = calculateTotals(accounts, transactions);
+  const { balances, totalMoney } = calculateTotals(accounts, transactions);
 
   // Today's activity
   const today = getTodayDate();
   const todayTotals = calculateDailyTotals(transactions, today);
-
   const recentTx = transactions.slice(0, 5);
-  const insights = generateInsights(accounts, transactions);
   const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   const budgetAlerts = generateBudgetAlerts(dashboardState.budgets, transactions, currentMonth);
 
   return `
-    <div class="page animate-fade-in">
-      <!-- Greeting -->
+    <div class="page animate-fade-in dashboard-page">
+      <!-- 1. Greeting + current date -->
       <div class="greeting">
-        <h1 class="greeting-text">${getGreeting()}, ${userName} 👋</h1>
+        <h1 class="greeting-text">Good ${getGreeting().replace('Good ', '')}, ${userName} 👋</h1>
         <p class="greeting-date">${formatCurrentDate()}</p>
       </div>
 
       <!-- Budget Alert Banner if any -->
       ${budgetAlerts.length > 0 ? `
-        <div style="margin-bottom: var(--space-6);">
+        <div style="margin-bottom: var(--space-4);">
           ${budgetAlerts.map(alert => `
             <div class="alert-banner alert-banner-${alert.type}">
               <span class="alert-banner-icon">${alert.icon}</span>
@@ -93,157 +91,94 @@ export function renderDashboardPage(state) {
         </div>
       ` : ''}
 
-      <!-- Main Balance Card: Total Money -->
+      <!-- 2. Total Money card -->
       <div class="balance-card">
-        <div class="balance-label">Total Money Across All Accounts</div>
+        <div class="balance-label">💰 TOTAL MONEY</div>
         <div class="balance-amount">${formatCurrency(totalMoney)}</div>
-        <div class="balance-subtitle">Available funds in Cash, Banks & Wallets</div>
+        <div class="balance-subtitle">Across ${accounts.length} account${accounts.length === 1 ? '' : 's'}</div>
       </div>
 
-      <!-- Account Breakdown Pills or Empty State -->
-      ${accounts.length > 0 ? `
-        <div class="card card-flat" style="margin-bottom: var(--space-6); padding: var(--space-4);">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
-            <div style="font-weight: var(--fw-semibold); font-size: var(--fs-sm); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em;">
-              Account Breakdown
-            </div>
-            <span class="section-link" id="link-manage-accounts">Manage Accounts →</span>
-          </div>
-          <div style="display: flex; gap: var(--space-3); overflow-x: auto; padding-bottom: 4px;">
-            ${accounts.map(acc => {
-              const bal = balances[acc.id] || 0;
-              return `
-                <div style="background: var(--bg-tertiary); padding: 8px 14px; border-radius: var(--radius-lg); flex-shrink: 0; min-width: 120px;">
-                  <div style="font-size: var(--fs-xs); color: var(--text-secondary);">${acc.icon || '🏦'} ${acc.name}</div>
-                  <div style="font-weight: var(--fw-bold); font-size: var(--fs-base); margin-top: 2px;">${formatCurrency(bal)}</div>
+      <!-- 3. Accounts section -->
+      <div class="section accounts-section">
+        <div class="section-header">
+          <h2 class="section-title-sm">ACCOUNTS</h2>
+          <span class="section-link" id="link-manage-accounts">View All →</span>
+        </div>
+        <div class="account-rows-container card card-flat">
+          ${accounts.length > 0 ? accounts.map(acc => {
+            const bal = balances[acc.id] || 0;
+            return `
+              <div class="account-compact-row">
+                <div class="account-row-left">
+                  <span class="account-row-icon">${acc.icon || '🏦'}</span>
+                  <span class="account-row-name">${acc.name}</span>
                 </div>
-              `;
-            }).join('')}
-          </div>
+                <div class="account-row-balance">${formatCurrency(bal)}</div>
+              </div>
+            `;
+          }).join('') : `
+            <div class="account-compact-empty">
+              <span style="font-size: 0.875rem; color: var(--text-secondary);">No accounts yet</span>
+              <button class="btn btn-sm btn-primary" id="empty-add-account-btn">➕ Add Account</button>
+            </div>
+          `}
         </div>
-      ` : `
-        <div class="card card-flat" style="margin-bottom: var(--space-6); padding: 24px; text-align: center;">
-          <div style="font-size: 2.5rem; margin-bottom: 8px;">🏦</div>
-          <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 4px;">No accounts yet</h3>
-          <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 16px;">Add your first account to start tracking your money.</p>
-          <button class="btn btn-primary btn-sm" id="empty-add-account-btn" style="margin: 0 auto; display: inline-flex;">➕ Add Account</button>
-        </div>
-      `}
+      </div>
 
-      <!-- Today's Money Activity -->
-      <div class="today-activity-card">
-        <div class="today-activity-header">
-          <div class="today-activity-title">Today's Money Activity</div>
-          <div class="today-activity-date">${formatDate(today)}</div>
+      <!-- 4. TODAY section -->
+      <div class="section today-section">
+        <div class="section-header">
+          <h2 class="section-title-sm">TODAY</h2>
         </div>
-        <div class="today-activity-grid">
-          <div class="today-activity-item">
-            <span class="today-activity-icon">🟢</span>
-            <span class="today-activity-label">Added</span>
-            <span class="today-activity-amount income">${formatCurrency(todayTotals.added)}</span>
+        <div class="today-compact-grid">
+          <div class="today-card income">
+            <div class="today-card-header">
+              <span class="today-card-icon">🟢</span>
+              <span class="today-card-label">Added</span>
+            </div>
+            <div class="today-card-amount income">${formatCurrency(todayTotals.added)}</div>
           </div>
-          <div class="today-activity-item">
-            <span class="today-activity-icon">🔴</span>
-            <span class="today-activity-label">Spent</span>
-            <span class="today-activity-amount expense">${formatCurrency(todayTotals.spent)}</span>
-          </div>
-          <div class="today-activity-item">
-            <span class="today-activity-icon">🔄</span>
-            <span class="today-activity-label">Transferred</span>
-            <span class="today-activity-amount transfer">${formatCurrency(todayTotals.transferred)}</span>
+          <div class="today-card expense">
+            <div class="today-card-header">
+              <span class="today-card-icon">🔴</span>
+              <span class="today-card-label">Spent</span>
+            </div>
+            <div class="today-card-amount expense">${formatCurrency(todayTotals.spent)}</div>
           </div>
         </div>
       </div>
 
-      <!-- Summary Cards -->
-      <div class="summary-grid" style="grid-template-columns: repeat(4, 1fr);">
-        <div class="summary-card">
-          <div class="summary-card-icon income">📥</div>
-          <div class="summary-card-amount" style="color: var(--income);">${formatCurrency(totalIncome)}</div>
-          <div class="summary-card-label">Money Added</div>
+      <!-- 5. Quick actions -->
+      <div class="section quick-actions-section">
+        <div class="quick-actions-row">
+          <button class="quick-action-btn income" id="btn-quick-add-money">
+            <span>+ Add Money</span>
+          </button>
+          <button class="quick-action-btn expense" id="btn-quick-add-expense">
+            <span>− Expense</span>
+          </button>
         </div>
-
-        <div class="summary-card">
-          <div class="summary-card-icon expense">📤</div>
-          <div class="summary-card-amount" style="color: var(--expense);">${formatCurrency(totalExpenses)}</div>
-          <div class="summary-card-label">Money Spent</div>
-        </div>
-
-        <div class="summary-card">
-          <div class="summary-card-icon balance" style="background: var(--primary-bg); color: var(--primary);">🔄</div>
-          <div class="summary-card-amount" style="color: var(--primary);">${formatCurrency(totalTransfers)}</div>
-          <div class="summary-card-label">Transferred</div>
-        </div>
-
-        <div class="summary-card">
-          <div class="summary-card-icon balance">💰</div>
-          <div class="summary-card-amount">${formatCurrency(totalMoney)}</div>
-          <div class="summary-card-label">Current Total</div>
-        </div>
-      </div>
-
-      <!-- Quick 3 Action Buttons -->
-      <div class="quick-actions" style="grid-template-columns: repeat(3, 1fr); margin-bottom: var(--space-6);">
-        <button class="quick-action-btn income" id="btn-quick-add-money">
-          <span>➕</span> Add Money
-        </button>
-        <button class="quick-action-btn expense" id="btn-quick-add-expense">
-          <span>−</span> Add Expense
-        </button>
-        <button class="quick-action-btn" id="btn-quick-transfer" style="background: var(--primary-bg); color: var(--primary); border: 1.5px solid var(--primary-light);">
-          <span>↔</span> Transfer
+        <button class="quick-action-btn transfer full-width" id="btn-quick-transfer">
+          <span>↕ Transfer</span>
         </button>
       </div>
 
-      <!-- Quick Nav Buttons -->
-      <div class="quick-nav">
-        <button class="quick-nav-btn" data-page="accounts">
-          <span class="quick-nav-icon">🏦</span>
-          <span>My Accounts</span>
-        </button>
-        <button class="quick-nav-btn" data-page="money-control">
-          <span class="quick-nav-icon">📅</span>
-          <span>Money Control</span>
-        </button>
-        <button class="quick-nav-btn" data-page="analytics">
-          <span class="quick-nav-icon">📊</span>
-          <span>Analytics</span>
-        </button>
-      </div>
-
-      <!-- Recent Transactions -->
+      <!-- 6. Recent Activity -->
       <div class="section recent-transactions">
         <div class="section-header">
-          <h2 class="section-title">Recent Activity</h2>
+          <h2 class="section-title-sm">RECENT ACTIVITY</h2>
           ${transactions.length > 0 ? `
             <span class="section-link" id="link-view-all-tx">View All →</span>
           ` : ''}
         </div>
 
-        <div class="card card-flat" style="padding: 0;">
+        <div class="card card-flat recent-tx-card">
           ${recentTx.length > 0
             ? renderTransactionList(recentTx, { showActions: true, showDate: true, accounts: dashboardState.accounts })
             : renderEmptyTransactions()
           }
         </div>
       </div>
-
-      <!-- Smart Insights -->
-      ${insights.length > 0 ? `
-        <div class="section">
-          <div class="section-header">
-            <h2 class="section-title">Money Control Insights 💡</h2>
-          </div>
-          <div class="insights-card">
-            ${insights.map(item => `
-              <div class="insight-item">
-                <span class="insight-icon">${item.icon}</span>
-                <div class="insight-text">${item.text}</div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      ` : ''}
     </div>
   `;
 }

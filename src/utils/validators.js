@@ -5,7 +5,7 @@
 /**
  * Validate amount
  */
-export function validateAmount(amount) {
+export function validateAmount(amount, allowZero = false) {
   if (amount === '' || amount === null || amount === undefined) {
     return 'Please enter an amount.';
   }
@@ -13,8 +13,8 @@ export function validateAmount(amount) {
   if (isNaN(num)) {
     return 'Please enter a valid number.';
   }
-  if (num <= 0) {
-    return 'Amount must be greater than ₹0.';
+  if (allowZero ? num < 0 : num <= 0) {
+    return allowZero ? 'Amount cannot be negative.' : 'Amount must be greater than ₹0.';
   }
   if (num > 99999999) {
     return 'Amount is too large.';
