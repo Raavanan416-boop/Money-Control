@@ -33,7 +33,7 @@ import { renderProfilePage, attachProfileListeners } from './pages/profile.js';
 import { renderSettingsPage, attachSettingsListeners } from './pages/settings.js';
 
 // Components & Skeletons
-import { renderSidebar, renderBottomNav, attachNavListeners } from './components/navbar.js';
+import { renderSidebar, renderMobileHeader, renderMobileDrawer, renderBottomNav, attachNavListeners } from './components/navbar.js';
 import { renderDashboardSkeleton } from './components/skeleton.js';
 import { openModal } from './components/modal.js';
 
@@ -288,11 +288,13 @@ function renderOnboardingView() {
 function renderLoadingView() {
   appEl.innerHTML = `
     <div class="app-layout">
+      ${renderMobileHeader()}
       ${renderSidebar(appState.activePage)}
       <main class="main-content">
         ${renderDashboardSkeleton()}
       </main>
       ${renderBottomNav(appState.activePage)}
+      ${renderMobileDrawer(appState.activePage, appState.user, appState.profile)}
     </div>
   `;
 }
@@ -311,15 +313,17 @@ function renderAppLayout() {
 
   appEl.innerHTML = `
     <div class="app-layout">
+      ${renderMobileHeader()}
       ${renderSidebar(appState.activePage)}
       <main class="main-content" id="main-content-area">
         ${pageHTML}
       </main>
       ${renderBottomNav(appState.activePage)}
+      ${renderMobileDrawer(appState.activePage, appState.user, appState.profile)}
     </div>
   `;
 
-  attachNavListeners(navigateTo);
+  attachNavListeners(navigateTo, appState);
   attachCurrentPageListeners(appState.activePage);
 }
 
