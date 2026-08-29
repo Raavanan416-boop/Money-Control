@@ -201,12 +201,16 @@ export function attachAuthListeners(onAuthSuccess) {
 
       try {
         await login(email, password);
-        toast.success('LoggedIn successfully!');
+        toast.success('Logged in successfully!');
         if (onAuthSuccess) onAuthSuccess();
       } catch (err) {
         toast.error(getAuthErrorMessage(err));
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = `<span class="btn-text">Log In</span>`;
+      } finally {
+        const currentBtn = document.getElementById('btn-login-submit');
+        if (currentBtn) {
+          currentBtn.disabled = false;
+          currentBtn.innerHTML = `<span class="btn-text">Log In</span>`;
+        }
       }
     };
   }
@@ -246,8 +250,12 @@ export function attachAuthListeners(onAuthSuccess) {
         if (onAuthSuccess) onAuthSuccess();
       } catch (err) {
         toast.error(getAuthErrorMessage(err));
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = `<span class="btn-text">Create Account</span>`;
+      } finally {
+        const currentBtn = document.getElementById('btn-register-submit');
+        if (currentBtn) {
+          currentBtn.disabled = false;
+          currentBtn.innerHTML = `<span class="btn-text">Create Account</span>`;
+        }
       }
     };
   }

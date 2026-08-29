@@ -2,15 +2,23 @@
 // 💰 Money Control V3 — PIN Lock Screen
 // ============================================
 
-import { hashPin, savePinHash, verifyPin, removePin, markPinPromptShown, getPinData } from '../services/pin.js';
+import {
+  hashPin,
+  savePinHash,
+  verifyPin,
+  removePin,
+  markPinPromptShown,
+  PIN_LENGTH
+} from '../services/pin.js';
 import { toast } from '../utils/toast.js';
 
 let pinState = {
-  mode: 'lock',      // 'lock' | 'setup-prompt' | 'create' | 'forgot'
+  mode: 'lock', // 'lock' | 'setup-prompt' | 'create' | 'change' | 'forgot'
   pin: '',
   confirmPin: '',
-  step: 'enter',     // 'enter' | 'confirm'
-  pinLength: 4,
+  currentPinInput: '',
+  step: 'enter', // 'enter' | 'confirm' | 'current'
+  pinLength: PIN_LENGTH,
   failedAttempts: 0,
   isProcessing: false,
   uid: null,
@@ -18,6 +26,8 @@ let pinState = {
   onUnlock: null,
   onSetupComplete: null
 };
+
+let keydownListenerAttached = false;
 
 /**
  * Show the PIN setup prompt (first time after login)
@@ -37,8 +47,25 @@ export function showCreatePinScreen(uid, onSetupComplete) {
   pinState.uid = uid;
   pinState.pin = '';
   pinState.confirmPin = '';
+  pinState.currentPinInput = '';
   pinState.step = 'enter';
-  pinState.pinLength = 4;
+  pinState.pinLength = PIN_LENGTH;
+  pinState.onSetupComplete = onSetupComplete;
+  renderPinOverlay();
+}
+
+/**
+ * Show the PIN change screen (current PIN -> new PIN -> confirm new PIN)
+ */
+export function showChangePinScreen(uid, storedHash, onSetupComplete) {
+  pinState.mode = 'change';
+  pinState.uid = uid;
+  pinState.storedHash = storedHash;
+  pinState.currentPinInput = '';
+  pinState.pin = '';
+  pinState.confirmPin = '';
+  pinState.step = storedHash ? 'current' : 'enter';
+  pinState.pinLength = PIN_LENGTH;
   pinState.onSetupComplete = onSetupComplete;
   renderPinOverlay();
 }
@@ -64,7 +91,9 @@ export function hidePinOverlay() {
   const overlay = document.getElementById('pin-lock-root');
   if (overlay) {
     overlay.classList.remove('show');
-    setTimeout(() => { overlay.innerHTML = ''; }, 300);
+    setTimeout(() => {
+      overlay.innerHTML = '';
+    }, 300);
   }
 }
 
@@ -82,6 +111,7 @@ function renderPinOverlay() {
       content = renderSetupPromptHTML();
       break;
     case 'create':
+    case 'change':
       content = renderCreatePinHTML();
       break;
     case 'lock':
@@ -96,6 +126,36 @@ function renderPinOverlay() {
   overlay.classList.add('show');
 
   attachPinListeners();
+  setupGlobalKeyboardHandler();
+}
+
+/**
+ * Global Keyboard Input Handler
+ */
+function setupGlobalKeyboardHandler() {
+  if (keydownListenerAttached) return;
+  keydownListenerAttached = true;
+
+  window.addEventListener('keydown', (e) => {
+    const overlay = document.getElementById('pin-lock-root');
+    if (!overlay || !overlay.classList.contains('show')) return;
+
+    // Do not capture keys if user is typing in text inputs (e.g. forgot password screen)
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.key >= '0' && e.key <= '9') {
+      if (pinState.isProcessing) return;
+      handleDigitKey(e.key);
+    } else if (e.key === 'Backspace') {
+      if (pinState.isProcessing) return;
+      handleDeleteKey();
+    } else if (e.key === 'Enter') {
+      if (pinState.isProcessing) return;
+      if (pinState.mode === 'lock') {
+        handleUnlock();
+      }
+    }
+  });
 }
 
 /**
@@ -108,7 +168,7 @@ function renderSetupPromptHTML() {
         <img src="/icon-192.png" alt="Money Control" class="pin-logo-img" />
       </div>
       <div class="pin-title">🔐 Secure Your Money</div>
-      <p class="pin-subtitle">Protect your financial information with a PIN.</p>
+      <p class="pin-subtitle">Protect your financial information with a 4-digit PIN.</p>
       <p class="pin-description">Add an extra layer of security to keep your money data private.</p>
       <div class="pin-prompt-actions">
         <button class="pin-btn pin-btn-primary" id="pin-setup-set">
@@ -123,30 +183,49 @@ function renderSetupPromptHTML() {
 }
 
 /**
- * Create PIN HTML — 4 or 6 digit selection + keypad
+ * Create / Change PIN HTML
  */
 function renderCreatePinHTML() {
-  const isConfirm = pinState.step === 'confirm';
-  const len = pinState.pinLength;
-  const currentPin = isConfirm ? pinState.confirmPin : pinState.pin;
+  let title = 'Create Your PIN';
+  let subtitle = 'Choose a 4-digit PIN to protect your data.';
+  let currentPin = pinState.pin;
+
+  if (pinState.mode === 'change') {
+    if (pinState.step === 'current') {
+      title = 'Current PIN';
+      subtitle = 'Enter your current 4-digit PIN.';
+      currentPin = pinState.currentPinInput;
+    } else if (pinState.step === 'enter') {
+      title = 'New PIN';
+      subtitle = 'Enter your new 4-digit PIN.';
+      currentPin = pinState.pin;
+    } else if (pinState.step === 'confirm') {
+      title = 'Confirm New PIN';
+      subtitle = 'Confirm your new 4-digit PIN.';
+      currentPin = pinState.confirmPin;
+    }
+  } else {
+    if (pinState.step === 'confirm') {
+      title = 'Confirm Your PIN';
+      subtitle = 'Enter your 4-digit PIN again to confirm.';
+      currentPin = pinState.confirmPin;
+    } else {
+      title = 'Enter Your PIN';
+      subtitle = 'Enter a 4-digit PIN to protect your data.';
+      currentPin = pinState.pin;
+    }
+  }
 
   return `
     <div class="pin-screen pin-create-screen animate-fade-in">
       <div class="pin-logo">
         <img src="/icon-192.png" alt="Money Control" class="pin-logo-img" />
       </div>
-      <div class="pin-title">${isConfirm ? 'Confirm Your PIN' : 'Create Your PIN'}</div>
-      <p class="pin-subtitle">${isConfirm ? 'Enter your PIN again to confirm.' : 'Choose a secure PIN to protect your data.'}</p>
-
-      ${!isConfirm ? `
-        <div class="pin-length-selector">
-          <button class="pin-length-btn ${len === 4 ? 'active' : ''}" data-len="4">4 Digits</button>
-          <button class="pin-length-btn ${len === 6 ? 'active' : ''}" data-len="6">6 Digits</button>
-        </div>
-      ` : ''}
+      <div class="pin-title">${title}</div>
+      <p class="pin-subtitle">${subtitle}</p>
 
       <div class="pin-dots" id="pin-dots">
-        ${renderPinDots(currentPin, len)}
+        ${renderPinDots(currentPin, PIN_LENGTH)}
       </div>
 
       <div class="pin-error" id="pin-create-error"></div>
@@ -166,10 +245,6 @@ function renderCreatePinHTML() {
  * Lock Screen HTML — with numeric keypad
  */
 function renderLockScreenHTML() {
-  const len = pinState.storedHash ? (pinState.storedHash.length > 0 ? 4 : 4) : 4;
-  // We don't know the PIN length from hash, so we'll use dynamic detection
-  // Accept 4 or 6 digits based on what the user enters
-
   return `
     <div class="pin-screen pin-lock-screen animate-fade-in">
       <div class="pin-logo">
@@ -177,10 +252,10 @@ function renderLockScreenHTML() {
       </div>
       <div class="pin-title">Money Control</div>
       <p class="pin-subtitle">Welcome Back 👋</p>
-      <p class="pin-description">Enter your PIN to unlock</p>
+      <p class="pin-description">Enter your PIN</p>
 
       <div class="pin-dots" id="pin-dots">
-        ${renderPinDots(pinState.pin, 6)}
+        ${renderPinDots(pinState.pin, PIN_LENGTH)}
       </div>
 
       <div class="pin-error" id="pin-lock-error"></div>
@@ -233,11 +308,11 @@ function renderForgotPinHTML() {
 /**
  * Render PIN dot indicators
  */
-function renderPinDots(currentValue, maxLength) {
+function renderPinDots(currentValue, maxLength = PIN_LENGTH) {
   let dots = '';
   for (let i = 0; i < maxLength; i++) {
     const filled = i < currentValue.length;
-    dots += `<span class="pin-dot ${filled ? 'filled' : ''}">●</span>`;
+    dots += `<span class="pin-dot ${filled ? 'filled' : ''}">${filled ? '●' : '○'}</span>`;
   }
   return dots;
 }
@@ -272,17 +347,22 @@ function updateDots() {
   if (!dotsContainer) return;
 
   let currentPin = '';
-  let maxLen = 4;
 
   if (pinState.mode === 'create') {
     currentPin = pinState.step === 'confirm' ? pinState.confirmPin : pinState.pin;
-    maxLen = pinState.pinLength;
+  } else if (pinState.mode === 'change') {
+    if (pinState.step === 'current') {
+      currentPin = pinState.currentPinInput;
+    } else if (pinState.step === 'confirm') {
+      currentPin = pinState.confirmPin;
+    } else {
+      currentPin = pinState.pin;
+    }
   } else if (pinState.mode === 'lock') {
     currentPin = pinState.pin;
-    maxLen = 6; // Show up to 6 dots dynamically
   }
 
-  dotsContainer.innerHTML = renderPinDots(currentPin, maxLen);
+  dotsContainer.innerHTML = renderPinDots(currentPin, PIN_LENGTH);
 }
 
 /**
@@ -312,18 +392,6 @@ function attachPinListeners() {
     };
   }
 
-  // PIN length selector
-  document.querySelectorAll('.pin-length-btn').forEach(btn => {
-    btn.onclick = () => {
-      const len = parseInt(btn.dataset.len);
-      pinState.pinLength = len;
-      pinState.pin = '';
-      pinState.confirmPin = '';
-      pinState.step = 'enter';
-      renderPinOverlay();
-    };
-  });
-
   // Keypad buttons
   document.querySelectorAll('.pin-key[data-key]').forEach(btn => {
     btn.onclick = () => {
@@ -341,17 +409,28 @@ function attachPinListeners() {
     };
   });
 
-  // Create PIN back button
+  // Create/Change PIN back button
   const createBack = document.getElementById('pin-create-back');
   if (createBack) {
     createBack.onclick = () => {
-      if (pinState.step === 'confirm') {
+      if (pinState.mode === 'change') {
+        if (pinState.step === 'confirm') {
+          pinState.step = 'enter';
+          pinState.confirmPin = '';
+          renderPinOverlay();
+        } else if (pinState.step === 'enter' && pinState.storedHash) {
+          pinState.step = 'current';
+          pinState.pin = '';
+          renderPinOverlay();
+        } else {
+          hidePinOverlay();
+        }
+      } else if (pinState.step === 'confirm') {
         pinState.step = 'enter';
         pinState.confirmPin = '';
         renderPinOverlay();
       } else {
-        pinState.mode = 'setup-prompt';
-        renderPinOverlay();
+        hidePinOverlay();
       }
     };
   }
@@ -392,33 +471,65 @@ function attachPinListeners() {
  * Handle digit key press
  */
 function handleDigitKey(digit) {
+  const errorEl = document.getElementById('pin-create-error');
+  if (errorEl) errorEl.textContent = '';
+
   if (pinState.mode === 'create') {
     if (pinState.step === 'confirm') {
-      if (pinState.confirmPin.length < pinState.pinLength) {
+      if (pinState.confirmPin.length < PIN_LENGTH) {
         pinState.confirmPin += digit;
         updateDots();
-        if (pinState.confirmPin.length === pinState.pinLength) {
+        if (pinState.confirmPin.length === PIN_LENGTH) {
           handleCreatePinSubmit();
         }
       }
     } else {
-      if (pinState.pin.length < pinState.pinLength) {
+      if (pinState.pin.length < PIN_LENGTH) {
         pinState.pin += digit;
         updateDots();
-        if (pinState.pin.length === pinState.pinLength) {
-          // Auto-advance to confirm step
+        if (pinState.pin.length === PIN_LENGTH) {
           setTimeout(() => {
             pinState.step = 'confirm';
             renderPinOverlay();
-          }, 300);
+          }, 200);
+        }
+      }
+    }
+  } else if (pinState.mode === 'change') {
+    if (pinState.step === 'current') {
+      if (pinState.currentPinInput.length < PIN_LENGTH) {
+        pinState.currentPinInput += digit;
+        updateDots();
+        if (pinState.currentPinInput.length === PIN_LENGTH) {
+          handleChangeCurrentPinSubmit();
+        }
+      }
+    } else if (pinState.step === 'confirm') {
+      if (pinState.confirmPin.length < PIN_LENGTH) {
+        pinState.confirmPin += digit;
+        updateDots();
+        if (pinState.confirmPin.length === PIN_LENGTH) {
+          handleCreatePinSubmit();
+        }
+      }
+    } else {
+      if (pinState.pin.length < PIN_LENGTH) {
+        pinState.pin += digit;
+        updateDots();
+        if (pinState.pin.length === PIN_LENGTH) {
+          setTimeout(() => {
+            pinState.step = 'confirm';
+            renderPinOverlay();
+          }, 200);
         }
       }
     }
   } else if (pinState.mode === 'lock') {
-    if (pinState.pin.length < 6) {
+    if (pinState.pin.length < PIN_LENGTH) {
       pinState.pin += digit;
       updateDots();
     }
+    // Any digit beyond PIN_LENGTH is strictly ignored
   }
 }
 
@@ -432,6 +543,14 @@ function handleDeleteKey() {
     } else {
       pinState.pin = pinState.pin.slice(0, -1);
     }
+  } else if (pinState.mode === 'change') {
+    if (pinState.step === 'current') {
+      pinState.currentPinInput = pinState.currentPinInput.slice(0, -1);
+    } else if (pinState.step === 'confirm') {
+      pinState.confirmPin = pinState.confirmPin.slice(0, -1);
+    } else {
+      pinState.pin = pinState.pin.slice(0, -1);
+    }
   } else if (pinState.mode === 'lock') {
     pinState.pin = pinState.pin.slice(0, -1);
   }
@@ -439,7 +558,47 @@ function handleDeleteKey() {
 }
 
 /**
- * Handle Create PIN submission
+ * Handle verifying current PIN during PIN change
+ */
+async function handleChangeCurrentPinSubmit() {
+  const errorEl = document.getElementById('pin-create-error');
+
+  if (pinState.currentPinInput.length !== PIN_LENGTH) {
+    if (errorEl) errorEl.textContent = 'Enter your 4-digit PIN.';
+    return;
+  }
+
+  pinState.isProcessing = true;
+
+  try {
+    const isCorrect = await verifyPin(pinState.currentPinInput, pinState.storedHash);
+
+    if (isCorrect) {
+      pinState.isProcessing = false;
+      pinState.step = 'enter';
+      pinState.pin = '';
+      pinState.confirmPin = '';
+      renderPinOverlay();
+    } else {
+      pinState.isProcessing = false;
+      if (errorEl) errorEl.textContent = 'Incorrect PIN. Try again.';
+      pinState.currentPinInput = '';
+      updateDots();
+
+      const dotsEl = document.getElementById('pin-dots');
+      if (dotsEl) {
+        dotsEl.classList.add('shake');
+        setTimeout(() => dotsEl.classList.remove('shake'), 500);
+      }
+    }
+  } catch (err) {
+    pinState.isProcessing = false;
+    if (errorEl) errorEl.textContent = 'Verification failed. Try again.';
+  }
+}
+
+/**
+ * Handle Create / New PIN submission
  */
 async function handleCreatePinSubmit() {
   const errorEl = document.getElementById('pin-create-error');
@@ -464,12 +623,13 @@ async function handleCreatePinSubmit() {
     const pinHashValue = await hashPin(pinState.pin);
     await savePinHash(pinState.uid, pinHashValue);
 
-    toast.success('🔐 PIN created successfully!');
+    toast.success(pinState.mode === 'change' ? '🔐 PIN updated successfully!' : '🔐 PIN created successfully!');
     hidePinOverlay();
 
     // Clear sensitive data from state
     pinState.pin = '';
     pinState.confirmPin = '';
+    pinState.currentPinInput = '';
     pinState.isProcessing = false;
 
     if (pinState.onSetupComplete) pinState.onSetupComplete();
@@ -480,15 +640,28 @@ async function handleCreatePinSubmit() {
 }
 
 /**
- * Handle PIN unlock
+ * Handle PIN unlock with strict length validation
  */
 async function handleUnlock() {
-  if (pinState.isProcessing || !pinState.pin) return;
+  if (pinState.isProcessing) return;
 
   const errorEl = document.getElementById('pin-lock-error');
-  pinState.isProcessing = true;
 
-  // Progressive delay after failed attempts
+  // 1. MUST NOT unlock unless enteredPIN.length === PIN_LENGTH (4 digits)
+  if (pinState.pin.length !== PIN_LENGTH) {
+    if (errorEl) errorEl.textContent = 'Enter your 4-digit PIN.';
+
+    // Shake animation
+    const dotsEl = document.getElementById('pin-dots');
+    if (dotsEl) {
+      dotsEl.classList.add('shake');
+      setTimeout(() => dotsEl.classList.remove('shake'), 500);
+    }
+    return;
+  }
+
+  // 2. Progressive delay after failed attempts
+  pinState.isProcessing = true;
   if (pinState.failedAttempts >= 3) {
     const delayMs = Math.min(Math.pow(2, pinState.failedAttempts - 2) * 1000, 30000);
     const unlockBtn = document.getElementById('pin-unlock-btn');
@@ -507,7 +680,7 @@ async function handleUnlock() {
     const isCorrect = await verifyPin(pinState.pin, pinState.storedHash);
 
     if (isCorrect) {
-      toast.success('🔓 Unlocked!');
+      toast.success('Unlocked successfully.');
       hidePinOverlay();
       pinState.pin = '';
       pinState.failedAttempts = 0;
@@ -566,7 +739,10 @@ async function handleForgotPinVerify() {
 
     if (!user || !user.email) {
       if (errorEl) errorEl.textContent = 'No authenticated user found.';
-      if (verifyBtn) { verifyBtn.disabled = false; verifyBtn.textContent = 'Verify & Reset PIN'; }
+      if (verifyBtn) {
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = 'Verify & Reset PIN';
+      }
       return;
     }
 

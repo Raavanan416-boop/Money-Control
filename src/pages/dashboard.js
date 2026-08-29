@@ -42,6 +42,23 @@ export function renderDashboardPage(state) {
   dashboardState = { ...dashboardState, ...state };
   const { profile, accounts, transactions } = dashboardState;
 
+  if (dashboardState.dashboardError) {
+    return `
+      <div class="page animate-fade-in" style="display: flex; align-items: center; justify-content: center; min-height: 60vh;">
+        <div class="card card-flat" style="padding: 40px 24px; text-align: center; max-width: 440px; width: 100%;">
+          <div style="font-size: 3.5rem; margin-bottom: 16px;">⚠️</div>
+          <h2 style="font-size: 1.25rem; font-weight: 800; margin-bottom: 8px; color: var(--text-primary);">Unable to load your data</h2>
+          <p style="color: var(--text-secondary); font-size: 0.9375rem; margin-bottom: 24px; line-height: 1.5;">
+            Something went wrong while loading your financial information.
+          </p>
+          <button class="btn btn-primary btn-lg" id="btn-retry-dashboard" style="margin: 0 auto; display: inline-flex; align-items: center; gap: 8px;">
+            🔄 Try Again
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   const userName = profile?.name ? profile.name.split(' ')[0] : 'User';
   const { balances, totalMoney, totalIncome, totalExpenses, totalTransfers } = calculateTotals(accounts, transactions);
 
@@ -83,7 +100,7 @@ export function renderDashboardPage(state) {
         <div class="balance-subtitle">Available funds in Cash, Banks & Wallets</div>
       </div>
 
-      <!-- Account Breakdown Pills -->
+      <!-- Account Breakdown Pills or Empty State -->
       ${accounts.length > 0 ? `
         <div class="card card-flat" style="margin-bottom: var(--space-6); padding: var(--space-4);">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
@@ -104,7 +121,14 @@ export function renderDashboardPage(state) {
             }).join('')}
           </div>
         </div>
-      ` : ''}
+      ` : `
+        <div class="card card-flat" style="margin-bottom: var(--space-6); padding: 24px; text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 8px;">🏦</div>
+          <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 4px;">No accounts yet</h3>
+          <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 16px;">Add your first account to start tracking your money.</p>
+          <button class="btn btn-primary btn-sm" id="empty-add-account-btn" style="margin: 0 auto; display: inline-flex;">➕ Add Account</button>
+        </div>
+      `}
 
       <!-- Today's Money Activity -->
       <div class="today-activity-card">
@@ -228,6 +252,22 @@ export function renderDashboardPage(state) {
  * Attach Dashboard Listeners
  */
 export function attachDashboardListeners(navigateFn, refreshData) {
+  // Retry button for Dashboard Error State
+  const retryBtn = document.getElementById('btn-retry-dashboard');
+  if (retryBtn) {
+    retryBtn.onclick = () => {
+      retryBtn.disabled = true;
+      retryBtn.innerHTML = `<span class="spinner"></span> Loading...`;
+      if (refreshData) refreshData();
+    };
+  }
+
+  // Empty account button
+  const emptyAddAccBtn = document.getElementById('empty-add-account-btn');
+  if (emptyAddAccBtn) {
+    emptyAddAccBtn.onclick = () => navigateFn('accounts');
+  }
+
   // Quick Nav
   document.querySelectorAll('.quick-nav-btn[data-page]').forEach(btn => {
     btn.onclick = () => navigateFn(btn.dataset.page);

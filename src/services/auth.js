@@ -8,6 +8,8 @@ import {
   signOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
   updateProfile as firebaseUpdateProfile,
   updatePassword,
   deleteUser,
@@ -16,6 +18,11 @@ import {
 } from 'firebase/auth';
 import { auth } from '../config/firebase.js';
 import { createUserProfile, deleteUserData } from './firestore.js';
+
+// Enforce browser local persistence for Firebase Auth
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn('Firebase setPersistence warning:', err);
+});
 
 /**
  * Register a new user with email/password and create Firestore profile

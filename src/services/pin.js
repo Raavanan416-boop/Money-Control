@@ -7,9 +7,12 @@
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase.js';
 
+/** Single Source of Truth for Application PIN Length */
+export const PIN_LENGTH = 4;
+
 /**
  * Hash a PIN using SHA-256 (Web Crypto API)
- * @param {string} pin - The plain PIN (4 or 6 digits)
+ * @param {string} pin - The plain PIN (4 digits)
  * @returns {Promise<string>} - Hex-encoded hash
  */
 export async function hashPin(pin) {
@@ -42,10 +45,11 @@ export async function getPinData(uid) {
       pinHash: data.pinHash || null,
       pinEnabled: data.pinEnabled || false,
       pinSetupPromptShown: data.pinSetupPromptShown || false,
-      autoLockTimeout: data.autoLockTimeout !== undefined ? data.autoLockTimeout : 5
+      autoLockTimeout: data.autoLockTimeout !== undefined ? data.autoLockTimeout : 5,
+      pinLength: PIN_LENGTH
     };
   }
-  return { pinHash: null, pinEnabled: false, pinSetupPromptShown: false, autoLockTimeout: 5 };
+  return { pinHash: null, pinEnabled: false, pinSetupPromptShown: false, autoLockTimeout: 5, pinLength: PIN_LENGTH };
 }
 
 /**

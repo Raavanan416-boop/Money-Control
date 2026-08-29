@@ -10,7 +10,7 @@ import { formatCurrency } from '../utils/formatters.js';
 import { validateAmount } from '../utils/validators.js';
 import { toast } from '../utils/toast.js';
 import { getPinData, saveAutoLockTimeout, removePin } from '../services/pin.js';
-import { showCreatePinScreen } from '../pages/pinlock.js';
+import { showCreatePinScreen, showChangePinScreen } from '../pages/pinlock.js';
 import { canInstallPWA, triggerInstallPrompt, isPWAInstalled } from '../services/pwa.js';
 
 let state = {
@@ -307,9 +307,9 @@ export function attachSettingsListeners(onLogout, refreshData) {
   // ===== Change PIN =====
   const changePinBtn = document.getElementById('btn-change-pin');
   if (changePinBtn) {
-    changePinBtn.onclick = () => {
-      showCreatePinScreen(state.user.uid, () => {
-        toast.success('🔐 PIN updated!');
+    changePinBtn.onclick = async () => {
+      const pinData = await getPinData(state.user.uid);
+      showChangePinScreen(state.user.uid, pinData.pinHash, () => {
         if (refreshData) refreshData();
       });
     };

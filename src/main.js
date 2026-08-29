@@ -5,6 +5,7 @@
 import { onAuthChange, getCurrentUser } from './services/auth.js';
 import {
   getUserProfile,
+  createUserProfile,
   subscribeToAccounts,
   subscribeToTransactions,
   ensureDefaultAccounts
@@ -46,6 +47,8 @@ const appState = {
   activePage: 'dashboard',
   unsubscribeAccounts: null,
   unsubscribeTx: null,
+  authLoading: true,
+  dashboardError: null,
   // V3 PIN lock state
   isLocked: false,
   pinEnabled: false,
@@ -77,10 +80,35 @@ initPWA();
 const appEl = document.getElementById('app');
 
 /**
+ * Render Auth Session Initialization View ("Restoring session...")
+ */
+function renderAuthInitView() {
+  appEl.innerHTML = `
+    <div class="auth-page" style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg-primary);">
+      <div class="auth-container" style="text-align: center; max-width: 360px; padding: 24px;">
+        <div class="auth-logo" style="margin-bottom: 24px;">
+          <img src="/icon-192.png" alt="Money Control" class="auth-logo-icon" style="width: 80px; height: 80px; border-radius: 20px; box-shadow: 0 8px 32px rgba(108, 99, 255, 0.35); margin: 0 auto 16px auto; display: block;" />
+          <h1 class="auth-logo-title" style="font-size: 1.75rem; font-weight: 800; margin-bottom: 8px;">Money Control</h1>
+          <p class="auth-logo-tagline" style="font-size: 0.9375rem; color: var(--text-secondary);">Restoring session...</p>
+        </div>
+        <div style="display: flex; justify-content: center; align-items: center; min-height: 48px;">
+          <span class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
  * Main Initialization Routine
  */
 function init() {
+  // Show branded loading screen immediately while Firebase restores session
+  renderAuthInitView();
+
   onAuthChange(async (user) => {
+    appState.authLoading = false;
+
     if (appState.unsubscribeAccounts) {
       appState.unsubscribeAccounts();
       appState.unsubscribeAccounts = null;
@@ -99,6 +127,7 @@ function init() {
       appState.isLocked = false;
       appState.pinEnabled = false;
       appState.pinHash = null;
+      appState.dashboardError = null;
       hidePinOverlay();
       stopAutoLockTimer();
       renderAuthView();
@@ -111,7 +140,9 @@ function init() {
     try {
       await loadUserData(user.uid);
     } catch (err) {
-      renderAuthView();
+      console.error('Error loading user data:', err);
+      appState.dashboardError = err;
+      renderAppLayout();
     }
   });
 
@@ -134,74 +165,117 @@ function init() {
  * Load user data, accounts, budgets, & real-time subscriptions
  */
 async function loadUserData(uid) {
-  const profile = await getUserProfile(uid);
-  appState.profile = profile;
+  appState.dashboardError = null;
 
-  // Check if onboarding is needed
-  if (!profile || profile.initialBalance === null || profile.initialBalance === undefined) {
-    renderOnboardingView();
-    return;
-  }
+  try {
+    let profile = await getUserProfile(uid);
 
-  // Ensure default Cash account exists
-  await ensureDefaultAccounts(uid, profile.initialBalance);
-
-  // Load Budgets
-  appState.budgets = await getUserBudgets(uid);
-
-  // Load PIN data
-  const pinData = await getPinData(uid);
-  appState.pinEnabled = pinData.pinEnabled;
-  appState.pinHash = pinData.pinHash;
-  appState.autoLockTimeout = pinData.autoLockTimeout !== undefined ? pinData.autoLockTimeout : 5;
-
-  // Subscribe to Accounts in real-time
-  appState.unsubscribeAccounts = subscribeToAccounts(uid, (accounts) => {
-    appState.accounts = accounts;
-    if (!appState.isLocked) {
-      renderAppLayout();
+    // Safely auto-create user profile if missing
+    if (!profile) {
+      const fallbackName = appState.user?.displayName || appState.user?.email?.split('@')[0] || 'User';
+      await createUserProfile(uid, {
+        name: fallbackName,
+        email: appState.user?.email || '',
+        createdAt: new Date().toISOString()
+      });
+      profile = await getUserProfile(uid);
     }
-  });
 
-  // Subscribe to Transactions in real-time
-  appState.unsubscribeTx = subscribeToTransactions(uid, (transactions) => {
-    appState.transactions = transactions;
-    if (!appState.isLocked) {
-      renderAppLayout();
+    appState.profile = profile;
+
+    // Check if onboarding is needed
+    if (!profile || profile.initialBalance === null || profile.initialBalance === undefined) {
+      renderOnboardingView();
+      return;
     }
-  });
 
-  // Handle PIN lock flow
-  if (appState.pinEnabled && appState.pinHash) {
-    // User has PIN enabled — show lock screen
-    appState.isLocked = true;
-    showPinLockScreen(uid, appState.pinHash, () => {
+    // Ensure default Cash account exists
+    await ensureDefaultAccounts(uid, profile.initialBalance);
+
+    // Load Budgets
+    try {
+      appState.budgets = await getUserBudgets(uid);
+    } catch (e) {
+      appState.budgets = [];
+    }
+
+    // Load PIN data
+    const pinData = await getPinData(uid);
+    appState.pinEnabled = pinData.pinEnabled;
+    appState.pinHash = pinData.pinHash;
+    appState.autoLockTimeout = pinData.autoLockTimeout !== undefined ? pinData.autoLockTimeout : 5;
+
+    // Subscribe to Accounts in real-time
+    appState.unsubscribeAccounts = subscribeToAccounts(uid, (accounts, error) => {
+      if (error) {
+        console.error('Accounts subscription error:', error);
+        appState.dashboardError = error;
+      } else {
+        appState.accounts = accounts;
+      }
+      if (!appState.isLocked) {
+        renderAppLayout();
+      }
+    });
+
+    // Subscribe to Transactions in real-time
+    appState.unsubscribeTx = subscribeToTransactions(uid, (transactions, error) => {
+      if (error) {
+        console.error('Transactions subscription error:', error);
+      } else {
+        appState.transactions = transactions;
+      }
+      if (!appState.isLocked) {
+        renderAppLayout();
+      }
+    });
+
+    // Handle PIN lock flow
+    if (appState.pinEnabled && appState.pinHash) {
+      // User has PIN enabled — show lock screen
+      appState.isLocked = true;
+      showPinLockScreen(uid, appState.pinHash, () => {
+        appState.isLocked = false;
+        appState.lastActivityTime = Date.now();
+        startAutoLockTimer();
+        renderAppLayout();
+      });
+    } else if (!pinData.pinSetupPromptShown) {
+      // First time — show PIN setup prompt
+      showPinSetupPrompt(uid, () => {
+        // Re-fetch PIN data after setup
+        getPinData(uid).then(newPinData => {
+          appState.pinEnabled = newPinData.pinEnabled;
+          appState.pinHash = newPinData.pinHash;
+          if (appState.pinEnabled) {
+            startAutoLockTimer();
+          }
+          renderAppLayout();
+        });
+      });
+    } else {
+      // No PIN — start normally and render layout immediately
       appState.isLocked = false;
-      appState.lastActivityTime = Date.now();
       startAutoLockTimer();
       renderAppLayout();
-    });
-  } else if (!pinData.pinSetupPromptShown) {
-    // First time — show PIN setup prompt
-    showPinSetupPrompt(uid, () => {
-      // Re-fetch PIN data after setup
-      getPinData(uid).then(newPinData => {
-        appState.pinEnabled = newPinData.pinEnabled;
-        appState.pinHash = newPinData.pinHash;
-        if (appState.pinEnabled) {
-          startAutoLockTimer();
-        }
-      });
-    });
-  } else {
-    // No PIN — start normally
-    startAutoLockTimer();
+    }
+  } catch (err) {
+    console.error('loadUserData error:', err);
+    appState.dashboardError = err;
+    renderAppLayout();
   }
 }
 
 function renderAuthView() {
   appEl.innerHTML = renderAuthPage();
-  attachAuthListeners(() => {});
+  attachAuthListeners(async () => {
+    const user = getCurrentUser();
+    if (user) {
+      appState.user = user;
+      renderLoadingView();
+      await loadUserData(user.uid);
+    }
+  });
 }
 
 function renderOnboardingView() {
