@@ -68,12 +68,6 @@ export function renderTransactionItem(tx, options = {}) {
           ${sign}${formatCurrency(tx.amount)}
         </div>
       </div>
-      ${showActions ? `
-        <div class="transaction-actions">
-          <button class="transaction-action-btn edit" data-action="edit" data-tx-id="${tx.id}" title="Edit">✏️</button>
-          <button class="transaction-action-btn delete" data-action="delete" data-tx-id="${tx.id}" title="Delete">🗑️</button>
-        </div>
-      ` : ''}
     </div>
   `;
 }

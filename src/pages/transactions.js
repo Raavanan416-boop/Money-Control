@@ -125,7 +125,7 @@ function renderTransactionListContent(filtered) {
   if (filtered.length === 0) {
     return renderEmptySearch();
   }
-  return renderTransactionList(filtered, { showActions: true, showDate: true, showNotes: true, accounts: state.accounts });
+  return renderTransactionList(filtered, { showActions: false, showDate: true, showNotes: true, accounts: state.accounts });
 }
 
 function getFilteredTransactions() {

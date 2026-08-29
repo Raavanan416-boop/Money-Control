@@ -174,7 +174,7 @@ export function renderDashboardPage(state) {
 
         <div class="card card-flat recent-tx-card">
           ${recentTx.length > 0
-            ? renderTransactionList(recentTx, { showActions: true, showDate: true, accounts: dashboardState.accounts })
+            ? renderTransactionList(recentTx, { showActions: false, showDate: true, accounts: dashboardState.accounts })
             : renderEmptyTransactions()
           }
         </div>
