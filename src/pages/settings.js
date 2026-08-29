@@ -1,5 +1,5 @@
 // ============================================
-// 💰 Money Control — Settings Page Component
+// 💰 Money Control V3 — Settings Page Component
 // ============================================
 
 import { logout, deleteAccount } from '../services/auth.js';
@@ -9,6 +9,9 @@ import { openModal, closeModal, showConfirm } from '../components/modal.js';
 import { formatCurrency } from '../utils/formatters.js';
 import { validateAmount } from '../utils/validators.js';
 import { toast } from '../utils/toast.js';
+import { getPinData, saveAutoLockTimeout, removePin } from '../services/pin.js';
+import { showCreatePinScreen } from '../pages/pinlock.js';
+import { canInstallPWA, triggerInstallPrompt, isPWAInstalled } from '../services/pwa.js';
 
 let state = {
   user: null,
@@ -27,11 +30,80 @@ export function renderSettingsPage(appState) {
   const allowNegative = profile?.settings?.allowNegativeBalance || false;
   const initialBalance = profile?.initialBalance || 0;
 
+  // PIN state
+  const pinEnabled = profile?.pinEnabled || false;
+  const autoLockTimeout = profile?.autoLockTimeout !== undefined ? profile.autoLockTimeout : 5;
+
+  // PWA state
+  const canInstall = canInstallPWA();
+  const isInstalled = isPWAInstalled();
+
   return `
     <div class="page animate-fade-in">
       <div class="page-header">
         <h1 class="page-title">Settings ⚙️</h1>
-        <p class="page-subtitle">Manage preferences, appearance, initial balance, and data exports.</p>
+        <p class="page-subtitle">Manage preferences, security, appearance, and data exports.</p>
+      </div>
+
+      <!-- Security Section -->
+      <div class="settings-section">
+        <div class="settings-section-title">🔐 Security</div>
+        <div class="settings-group">
+          <div class="settings-item">
+            <div class="settings-item-left">
+              <div class="settings-item-icon">🔒</div>
+              <div>
+                <div class="settings-item-text">PIN Lock</div>
+                <div class="settings-item-subtitle">${pinEnabled ? 'PIN protection is enabled' : 'Add a PIN to protect your data'}</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="toggle-pin-lock" ${pinEnabled ? 'checked' : ''} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          ${pinEnabled ? `
+            <div class="settings-item" id="btn-change-pin">
+              <div class="settings-item-left">
+                <div class="settings-item-icon">🔑</div>
+                <div>
+                  <div class="settings-item-text">Change PIN</div>
+                  <div class="settings-item-subtitle">Set a new PIN for your account</div>
+                </div>
+              </div>
+              <div class="settings-item-right">❯</div>
+            </div>
+
+            <div class="settings-item">
+              <div class="settings-item-left">
+                <div class="settings-item-icon">⏱️</div>
+                <div>
+                  <div class="settings-item-text">Auto Lock</div>
+                  <div class="settings-item-subtitle">Lock app after inactivity</div>
+                </div>
+              </div>
+              <select id="select-auto-lock" class="form-select" style="max-width: 160px; margin: 0;">
+                <option value="0" ${autoLockTimeout === 0 ? 'selected' : ''}>Immediately</option>
+                <option value="1" ${autoLockTimeout === 1 ? 'selected' : ''}>After 1 minute</option>
+                <option value="5" ${autoLockTimeout === 5 ? 'selected' : ''}>After 5 minutes</option>
+                <option value="15" ${autoLockTimeout === 15 ? 'selected' : ''}>After 15 minutes</option>
+                <option value="-1" ${autoLockTimeout === -1 ? 'selected' : ''}>Never</option>
+              </select>
+            </div>
+
+            <div class="settings-item" id="btn-lock-app-now" style="cursor: pointer;">
+              <div class="settings-item-left">
+                <div class="settings-item-icon">🔒</div>
+                <div>
+                  <div class="settings-item-text">Lock App Now</div>
+                  <div class="settings-item-subtitle">Immediately lock the application</div>
+                </div>
+              </div>
+              <div class="settings-item-right">❯</div>
+            </div>
+          ` : ''}
+        </div>
       </div>
 
       <!-- Appearance Section -->
@@ -53,6 +125,38 @@ export function renderSettingsPage(appState) {
           </div>
         </div>
       </div>
+
+      <!-- App Section -->
+      ${canInstall || isInstalled ? `
+        <div class="settings-section">
+          <div class="settings-section-title">📱 App</div>
+          <div class="settings-group">
+            ${canInstall ? `
+              <div class="settings-item" id="btn-install-pwa" style="cursor: pointer;">
+                <div class="settings-item-left">
+                  <div class="settings-item-icon">📲</div>
+                  <div>
+                    <div class="settings-item-text">Install Money Control</div>
+                    <div class="settings-item-subtitle">Add to your home screen for quick access</div>
+                  </div>
+                </div>
+                <div class="settings-item-right">Install</div>
+              </div>
+            ` : ''}
+            ${isInstalled ? `
+              <div class="settings-item">
+                <div class="settings-item-left">
+                  <div class="settings-item-icon">✅</div>
+                  <div>
+                    <div class="settings-item-text">App Installed</div>
+                    <div class="settings-item-subtitle">Money Control is installed on this device</div>
+                  </div>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      ` : ''}
 
       <!-- Financial Controls Section -->
       <div class="settings-section">
@@ -163,6 +267,89 @@ export function renderSettingsPage(appState) {
  * Attach Settings Listeners
  */
 export function attachSettingsListeners(onLogout, refreshData) {
+  // ===== PIN Lock Toggle =====
+  const pinToggle = document.getElementById('toggle-pin-lock');
+  if (pinToggle) {
+    pinToggle.onchange = async (e) => {
+      const enable = e.target.checked;
+      if (enable) {
+        // Show Create PIN screen
+        showCreatePinScreen(state.user.uid, () => {
+          if (refreshData) refreshData();
+        });
+        // Revert toggle until PIN is actually set
+        e.target.checked = false;
+      } else {
+        // Disable PIN — confirm first
+        const confirmed = await showConfirm({
+          icon: '🔓',
+          title: 'Disable PIN Lock',
+          message: 'Are you sure you want to remove PIN protection? Your financial data will no longer be locked.',
+          confirmText: 'Remove PIN',
+          danger: true
+        });
+        if (confirmed) {
+          try {
+            await removePin(state.user.uid);
+            toast.success('🔓 PIN lock disabled.');
+            if (refreshData) refreshData();
+          } catch (err) {
+            toast.error('Unable to disable PIN.');
+            e.target.checked = true;
+          }
+        } else {
+          e.target.checked = true;
+        }
+      }
+    };
+  }
+
+  // ===== Change PIN =====
+  const changePinBtn = document.getElementById('btn-change-pin');
+  if (changePinBtn) {
+    changePinBtn.onclick = () => {
+      showCreatePinScreen(state.user.uid, () => {
+        toast.success('🔐 PIN updated!');
+        if (refreshData) refreshData();
+      });
+    };
+  }
+
+  // ===== Auto Lock Selection =====
+  const autoLockSelect = document.getElementById('select-auto-lock');
+  if (autoLockSelect) {
+    autoLockSelect.onchange = async (e) => {
+      const minutes = parseInt(e.target.value);
+      try {
+        await saveAutoLockTimeout(state.user.uid, minutes);
+        toast.success('⏱️ Auto-lock updated.');
+        if (refreshData) refreshData();
+      } catch (err) {
+        toast.error('Unable to update auto-lock setting.');
+      }
+    };
+  }
+
+  // ===== Lock App Now =====
+  const lockNowBtn = document.getElementById('btn-lock-app-now');
+  if (lockNowBtn) {
+    lockNowBtn.onclick = () => {
+      window.dispatchEvent(new CustomEvent('lock-app'));
+    };
+  }
+
+  // ===== Install PWA =====
+  const installBtn = document.getElementById('btn-install-pwa');
+  if (installBtn) {
+    installBtn.onclick = async () => {
+      const installed = await triggerInstallPrompt();
+      if (installed) {
+        toast.success('📲 Money Control installed!');
+        if (refreshData) refreshData();
+      }
+    };
+  }
+
   // Light Theme
   const lightBtn = document.getElementById('btn-theme-light');
   if (lightBtn) {

@@ -1,5 +1,5 @@
 // ============================================
-// 💰 Money Control V2 — Application Entry Point & Router
+// 💰 Money Control V3 — Application Entry Point & Router
 // ============================================
 
 import { onAuthChange, getCurrentUser } from './services/auth.js';
@@ -10,6 +10,14 @@ import {
   ensureDefaultAccounts
 } from './services/firestore.js';
 import { getUserBudgets } from './services/budget.js';
+import { initPWA } from './services/pwa.js';
+import { getPinData } from './services/pin.js';
+import {
+  showPinSetupPrompt,
+  showPinLockScreen,
+  showCreatePinScreen,
+  hidePinOverlay
+} from './pages/pinlock.js';
 
 // Pages
 import { renderAuthPage, attachAuthListeners } from './pages/auth.js';
@@ -37,8 +45,17 @@ const appState = {
   budgets: [],
   activePage: 'dashboard',
   unsubscribeAccounts: null,
-  unsubscribeTx: null
+  unsubscribeTx: null,
+  // V3 PIN lock state
+  isLocked: false,
+  pinEnabled: false,
+  pinHash: null,
+  autoLockTimeout: 5, // minutes
+  lastActivityTime: Date.now()
 };
+
+// Auto-lock timer
+let autoLockTimer = null;
 
 // Initialize Theme
 function initTheme() {
@@ -53,6 +70,9 @@ function initTheme() {
 }
 
 initTheme();
+
+// Initialize PWA
+initPWA();
 
 const appEl = document.getElementById('app');
 
@@ -76,6 +96,11 @@ function init() {
       appState.accounts = [];
       appState.transactions = [];
       appState.budgets = [];
+      appState.isLocked = false;
+      appState.pinEnabled = false;
+      appState.pinHash = null;
+      hidePinOverlay();
+      stopAutoLockTimer();
       renderAuthView();
       return;
     }
@@ -86,7 +111,6 @@ function init() {
     try {
       await loadUserData(user.uid);
     } catch (err) {
-      console.error('Error loading user data:', err);
       renderAuthView();
     }
   });
@@ -96,6 +120,14 @@ function init() {
   window.addEventListener('open-add-menu', () => {
     openAddMenuModal();
   });
+
+  // Lock app event (from settings/profile)
+  window.addEventListener('lock-app', () => {
+    lockApp();
+  });
+
+  // Track user activity for auto-lock
+  setupActivityTracking();
 }
 
 /**
@@ -117,17 +149,54 @@ async function loadUserData(uid) {
   // Load Budgets
   appState.budgets = await getUserBudgets(uid);
 
+  // Load PIN data
+  const pinData = await getPinData(uid);
+  appState.pinEnabled = pinData.pinEnabled;
+  appState.pinHash = pinData.pinHash;
+  appState.autoLockTimeout = pinData.autoLockTimeout !== undefined ? pinData.autoLockTimeout : 5;
+
   // Subscribe to Accounts in real-time
   appState.unsubscribeAccounts = subscribeToAccounts(uid, (accounts) => {
     appState.accounts = accounts;
-    renderAppLayout();
+    if (!appState.isLocked) {
+      renderAppLayout();
+    }
   });
 
   // Subscribe to Transactions in real-time
   appState.unsubscribeTx = subscribeToTransactions(uid, (transactions) => {
     appState.transactions = transactions;
-    renderAppLayout();
+    if (!appState.isLocked) {
+      renderAppLayout();
+    }
   });
+
+  // Handle PIN lock flow
+  if (appState.pinEnabled && appState.pinHash) {
+    // User has PIN enabled — show lock screen
+    appState.isLocked = true;
+    showPinLockScreen(uid, appState.pinHash, () => {
+      appState.isLocked = false;
+      appState.lastActivityTime = Date.now();
+      startAutoLockTimer();
+      renderAppLayout();
+    });
+  } else if (!pinData.pinSetupPromptShown) {
+    // First time — show PIN setup prompt
+    showPinSetupPrompt(uid, () => {
+      // Re-fetch PIN data after setup
+      getPinData(uid).then(newPinData => {
+        appState.pinEnabled = newPinData.pinEnabled;
+        appState.pinHash = newPinData.pinHash;
+        if (appState.pinEnabled) {
+          startAutoLockTimer();
+        }
+      });
+    });
+  } else {
+    // No PIN — start normally
+    startAutoLockTimer();
+  }
 }
 
 function renderAuthView() {
@@ -155,6 +224,8 @@ function renderLoadingView() {
 }
 
 function renderAppLayout() {
+  if (appState.isLocked) return;
+
   const hash = window.location.hash.replace('#/', '').replace('#', '');
   if (hash && ['dashboard', 'accounts', 'transactions', 'money-control', 'analytics', 'budget', 'profile', 'settings'].includes(hash)) {
     appState.activePage = hash;
@@ -206,6 +277,13 @@ function attachCurrentPageListeners(page) {
     if (appState.user) {
       appState.profile = await getUserProfile(appState.user.uid);
       appState.budgets = await getUserBudgets(appState.user.uid);
+
+      // Re-fetch PIN data
+      const pinData = await getPinData(appState.user.uid);
+      appState.pinEnabled = pinData.pinEnabled;
+      appState.pinHash = pinData.pinHash;
+      appState.autoLockTimeout = pinData.autoLockTimeout !== undefined ? pinData.autoLockTimeout : 5;
+
       renderAppLayout();
     }
   };
@@ -247,9 +325,91 @@ function navigateTo(page) {
 }
 
 function handleRoute() {
-  if (appState.user && appState.profile?.initialBalance !== null) {
+  if (appState.user && appState.profile?.initialBalance !== null && !appState.isLocked) {
     renderAppLayout();
   }
+}
+
+/**
+ * Lock the app — show PIN lock screen
+ */
+function lockApp() {
+  if (!appState.pinEnabled || !appState.pinHash || !appState.user) return;
+
+  appState.isLocked = true;
+  showPinLockScreen(appState.user.uid, appState.pinHash, () => {
+    appState.isLocked = false;
+    appState.lastActivityTime = Date.now();
+    startAutoLockTimer();
+    renderAppLayout();
+  });
+}
+
+/**
+ * Auto-lock timer management
+ */
+function startAutoLockTimer() {
+  stopAutoLockTimer();
+
+  if (!appState.pinEnabled || !appState.pinHash) return;
+  if (appState.autoLockTimeout < 0) return; // "Never" = -1
+
+  const timeoutMs = appState.autoLockTimeout === 0
+    ? 0 // Immediately (lock on visibility change only)
+    : appState.autoLockTimeout * 60 * 1000;
+
+  if (timeoutMs > 0) {
+    autoLockTimer = setInterval(() => {
+      const elapsed = Date.now() - appState.lastActivityTime;
+      if (elapsed >= timeoutMs && !appState.isLocked) {
+        lockApp();
+      }
+    }, 10000); // Check every 10 seconds
+  }
+}
+
+function stopAutoLockTimer() {
+  if (autoLockTimer) {
+    clearInterval(autoLockTimer);
+    autoLockTimer = null;
+  }
+}
+
+/**
+ * Track user activity for auto-lock
+ */
+function setupActivityTracking() {
+  const resetActivity = () => {
+    appState.lastActivityTime = Date.now();
+  };
+
+  // Track clicks, keys, touches, scrolls
+  ['click', 'keydown', 'touchstart', 'scroll'].forEach(event => {
+    document.addEventListener(event, resetActivity, { passive: true });
+  });
+
+  // Visibility change — lock if "immediately" or check elapsed time
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      // User left the app — record time
+      return;
+    }
+
+    // User returned
+    if (!appState.pinEnabled || !appState.pinHash || appState.isLocked) return;
+
+    const elapsed = Date.now() - appState.lastActivityTime;
+
+    if (appState.autoLockTimeout === 0) {
+      // "Immediately" — lock on any return
+      lockApp();
+    } else if (appState.autoLockTimeout > 0) {
+      const timeoutMs = appState.autoLockTimeout * 60 * 1000;
+      if (elapsed >= timeoutMs) {
+        lockApp();
+      }
+    }
+  });
 }
 
 /**

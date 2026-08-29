@@ -20,7 +20,7 @@ export function renderSidebar(activePage) {
   return `
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <span class="sidebar-logo-icon">💰</span>
+        <img src="/icon-192.png" alt="Money Control" class="sidebar-logo-icon" style="width: 32px; height: 32px; border-radius: 8px;" />
         <span class="sidebar-logo-text">Money Control</span>
       </div>
       <nav class="sidebar-nav">

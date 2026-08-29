@@ -1,0 +1,586 @@
+/* ============================================
+   💰 Money Control V3 — PIN Lock Styles
+   ============================================ */
+
+/* PIN Overlay Container */
+#pin-lock-root {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#pin-lock-root.show {
+  pointer-events: all;
+  opacity: 1;
+}
+
+.pin-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* PIN Screen Shared */
+.pin-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 400px;
+  padding: 40px 24px;
+  text-align: center;
+  min-height: 100dvh;
+}
+
+/* Logo */
+.pin-logo {
+  margin-bottom: 24px;
+}
+
+.pin-logo-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(108, 99, 255, 0.3);
+  animation: pinLogoPulse 2s ease-in-out infinite;
+}
+
+@keyframes pinLogoPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* Typography */
+.pin-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+.pin-subtitle {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+.pin-description {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  margin-bottom: 24px;
+  line-height: 1.5;
+  max-width: 280px;
+}
+
+/* Setup Prompt Actions */
+.pin-prompt-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 280px;
+  margin-top: 16px;
+}
+
+/* Buttons */
+.pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 28px;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pin-btn-primary {
+  background: var(--gradient-hero, linear-gradient(135deg, #6C63FF 0%, #8B83FF 100%));
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(108, 99, 255, 0.35);
+}
+
+.pin-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(108, 99, 255, 0.45);
+}
+
+.pin-btn-primary:active {
+  transform: translateY(0);
+}
+
+.pin-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 12px 28px;
+}
+
+.pin-btn-ghost:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.pin-btn-sm {
+  font-size: 0.875rem;
+  padding: 10px 20px;
+}
+
+/* PIN Length Selector */
+.pin-length-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.pin-length-btn {
+  flex: 1;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.pin-length-btn.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(108, 99, 255, 0.3);
+}
+
+/* PIN Dots */
+.pin-dots {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+  justify-content: center;
+  min-height: 36px;
+  align-items: center;
+}
+
+.pin-dot {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 18px;
+  color: var(--border-color, #d1d5db);
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.pin-dot.filled {
+  color: var(--primary);
+  transform: scale(1.2);
+}
+
+/* Shake animation for wrong PIN */
+.pin-dots.shake {
+  animation: pinShake 0.5s ease;
+}
+
+@keyframes pinShake {
+  0%, 100% { transform: translateX(0); }
+  10%, 50%, 90% { transform: translateX(-8px); }
+  30%, 70% { transform: translateX(8px); }
+}
+
+/* PIN Error */
+.pin-error {
+  color: var(--expense);
+  font-size: 0.875rem;
+  font-weight: 500;
+  min-height: 24px;
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+
+/* Numeric Keypad */
+.pin-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+  max-width: 280px;
+  margin-bottom: 20px;
+}
+
+.pin-key {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color, #e2e8f0);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  margin: 0 auto;
+  user-select: none;
+}
+
+.pin-key:hover {
+  background: var(--primary-bg);
+  border-color: var(--primary-light);
+}
+
+.pin-key:active,
+.pin-key.pressed {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  transform: scale(0.95);
+}
+
+.pin-key-empty {
+  border: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.pin-key-delete {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+}
+
+.pin-key-delete:active,
+.pin-key-delete.pressed {
+  background: var(--expense-bg);
+  color: var(--expense);
+  border-color: var(--expense-light, #f87171);
+}
+
+/* Unlock Button */
+.pin-unlock-btn {
+  width: 100%;
+  max-width: 280px;
+  margin-bottom: 16px;
+}
+
+/* Footer Actions */
+.pin-footer-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* Forgot PIN Form */
+.pin-forgot-form {
+  width: 100%;
+  max-width: 320px;
+  margin-top: 16px;
+}
+
+.pin-forgot-input {
+  text-align: center;
+  font-size: 1rem;
+}
+
+.pin-forgot-form .pin-btn {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* ===== PWA Install Banner ===== */
+#pwa-install-banner {
+  position: fixed;
+  bottom: -100px;
+  left: 0;
+  right: 0;
+  z-index: 9998;
+  padding: 0 16px 16px;
+  transition: bottom 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+#pwa-install-banner.show {
+  bottom: 0;
+  pointer-events: all;
+}
+
+/* Account for bottom nav on mobile */
+@media (max-width: 768px) {
+  #pwa-install-banner.show {
+    bottom: 72px;
+  }
+}
+
+.pwa-install-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.pwa-install-icon {
+  flex-shrink: 0;
+}
+
+.pwa-install-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pwa-install-text strong {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pwa-install-text span {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.pwa-install-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pwa-install-btn {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.pwa-install-btn:hover {
+  background: var(--primary-dark);
+}
+
+.pwa-install-dismiss {
+  padding: 6px 16px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.pwa-install-dismiss:hover {
+  color: var(--text-secondary);
+}
+
+/* ===== Offline Banner ===== */
+#offline-banner {
+  position: fixed;
+  top: -60px;
+  left: 0;
+  right: 0;
+  z-index: 9997;
+  transition: top 0.3s ease;
+  pointer-events: none;
+}
+
+#offline-banner.show {
+  top: 0;
+  pointer-events: all;
+}
+
+.offline-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.offline-icon {
+  font-size: 1rem;
+}
+
+/* ===== Locked Date Display ===== */
+.date-locked-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border-color, #e2e8f0);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.date-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--primary-bg);
+  color: var(--primary);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ===== Today Activity Card ===== */
+.today-activity-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl, 16px);
+  border: 1px solid var(--border-color, #e2e8f0);
+  padding: 20px;
+  margin-bottom: var(--space-6, 24px);
+}
+
+.today-activity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.today-activity-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.today-activity-date {
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.today-activity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.today-activity-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+}
+
+.today-activity-icon {
+  font-size: 1.25rem;
+}
+
+.today-activity-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.today-activity-amount {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.today-activity-amount.income {
+  color: var(--income);
+}
+
+.today-activity-amount.expense {
+  color: var(--expense);
+}
+
+.today-activity-amount.transfer {
+  color: var(--primary);
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 400px) {
+  .pin-key {
+    width: 64px;
+    height: 64px;
+    font-size: 1.25rem;
+  }
+
+  .pin-keypad {
+    gap: 10px;
+  }
+
+  .pin-dots {
+    gap: 12px;
+  }
+
+  .pin-title {
+    font-size: 1.25rem;
+  }
+
+  .today-activity-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .today-activity-item {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 12px 16px;
+  }
+}
+
+/* Safe area support for PWA standalone */
+@supports (padding: env(safe-area-inset-top)) {
+  .pin-screen {
+    padding-top: calc(40px + env(safe-area-inset-top));
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  }
+}

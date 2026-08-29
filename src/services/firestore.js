@@ -197,8 +197,16 @@ export async function ensureDefaultAccounts(uid, initialBalance = 0) {
 
 /**
  * Add a new transaction (INCOME, EXPENSE, TRANSFER)
+ * V3: Validates that date is today's local date
  */
 export async function addTransaction(uid, data) {
+  // V3: Backend date validation — new transactions must be today
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  if (data.date !== todayStr) {
+    throw new Error('⚠️ Invalid transaction date. New transactions can only be created for today.');
+  }
+
   const txRef = collection(db, 'users', uid, 'transactions');
   const txData = {
     type: data.type, // 'INCOME' | 'EXPENSE' | 'TRANSFER'

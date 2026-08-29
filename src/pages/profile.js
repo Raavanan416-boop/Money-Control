@@ -59,6 +59,19 @@ export function renderProfilePage(appState) {
           <div class="settings-item-right">❯</div>
         </div>
 
+        ${state.profile?.pinEnabled ? `
+          <div class="settings-item" id="btn-profile-lock-app" style="cursor: pointer;">
+            <div class="settings-item-left">
+              <div class="settings-item-icon">🔒</div>
+              <div>
+                <div class="settings-item-text">Lock App</div>
+                <div class="settings-item-subtitle">Lock the app and require PIN to unlock</div>
+              </div>
+            </div>
+            <div class="settings-item-right">❯</div>
+          </div>
+        ` : ''}
+
         <div class="settings-item danger" id="btn-profile-logout">
           <div class="settings-item-left">
             <div class="settings-item-icon">🚪</div>
@@ -214,6 +227,14 @@ export function attachProfileListeners(onLogout, refreshData) {
         toast.info('Logged out.');
         if (onLogout) onLogout();
       }
+    };
+  }
+
+  // Lock App
+  const lockAppBtn = document.getElementById('btn-profile-lock-app');
+  if (lockAppBtn) {
+    lockAppBtn.onclick = () => {
+      window.dispatchEvent(new CustomEvent('lock-app'));
     };
   }
 }

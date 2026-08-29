@@ -103,6 +103,28 @@ export function validateDate(date) {
 }
 
 /**
+ * Validate that date is today's local date (for new transactions)
+ */
+export function validateTodayDate(date) {
+  if (!date) {
+    return 'Date is required.';
+  }
+  const d = new Date(date);
+  if (isNaN(d.getTime())) {
+    return 'Please enter a valid date.';
+  }
+
+  // Get today's local date
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  if (date !== todayStr) {
+    return '⚠️ Invalid transaction date. New transactions can only be created for today.';
+  }
+  return null;
+}
+
+/**
  * Validate category
  */
 export function validateCategory(category) {
@@ -125,15 +147,22 @@ export function sanitizeText(text) {
 
 /**
  * Validate transaction form
+ * @param {object} data - Transaction data
+ * @param {boolean} isNew - If true, enforces today-only date validation
  */
-export function validateTransaction(data) {
+export function validateTransaction(data, isNew = true) {
   const errors = {};
 
   const amountErr = validateAmount(data.amount);
   if (amountErr) errors.amount = amountErr;
 
-  const dateErr = validateDate(data.date);
-  if (dateErr) errors.date = dateErr;
+  if (isNew) {
+    const dateErr = validateTodayDate(data.date);
+    if (dateErr) errors.date = dateErr;
+  } else {
+    const dateErr = validateDate(data.date);
+    if (dateErr) errors.date = dateErr;
+  }
 
   const reasonErr = validateRequired(data.reason, 'a reason');
   if (reasonErr) errors.reason = reasonErr;

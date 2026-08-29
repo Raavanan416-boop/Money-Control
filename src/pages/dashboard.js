@@ -1,5 +1,5 @@
 // ============================================
-// 💰 Money Control V2 — Dashboard Page Component
+// 💰 Money Control V3 — Dashboard Page Component
 // ============================================
 
 import {
@@ -7,12 +7,15 @@ import {
   getGreeting,
   formatCurrentDate,
   getTodayDate,
+  getLocalDateDisplay,
+  formatDate,
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES
 } from '../utils/formatters.js';
 import {
   calculateTotals,
   calculateAccountBalances,
+  calculateDailyTotals,
   generateInsights
 } from '../utils/calculations.js';
 import { renderTransactionList } from '../components/transaction-card.js';
@@ -20,8 +23,9 @@ import { renderEmptyTransactions } from '../components/empty-state.js';
 import { openModal, closeModal, showConfirm } from '../components/modal.js';
 import { addTransaction, updateTransaction, deleteTransaction } from '../services/firestore.js';
 import { generateBudgetAlerts } from '../services/budget.js';
-import { validateTransaction, validateAmount, validateRequired } from '../utils/validators.js';
+import { validateTransaction, validateAmount, validateRequired, validateTodayDate } from '../utils/validators.js';
 import { toast } from '../utils/toast.js';
+import { isOnline } from '../services/pwa.js';
 
 let dashboardState = {
   user: null,
@@ -40,6 +44,10 @@ export function renderDashboardPage(state) {
 
   const userName = profile?.name ? profile.name.split(' ')[0] : 'User';
   const { balances, totalMoney, totalIncome, totalExpenses, totalTransfers } = calculateTotals(accounts, transactions);
+
+  // Today's activity
+  const today = getTodayDate();
+  const todayTotals = calculateDailyTotals(transactions, today);
 
   const recentTx = transactions.slice(0, 5);
   const insights = generateInsights(accounts, transactions);
@@ -97,6 +105,31 @@ export function renderDashboardPage(state) {
           </div>
         </div>
       ` : ''}
+
+      <!-- Today's Money Activity -->
+      <div class="today-activity-card">
+        <div class="today-activity-header">
+          <div class="today-activity-title">Today's Money Activity</div>
+          <div class="today-activity-date">${formatDate(today)}</div>
+        </div>
+        <div class="today-activity-grid">
+          <div class="today-activity-item">
+            <span class="today-activity-icon">🟢</span>
+            <span class="today-activity-label">Added</span>
+            <span class="today-activity-amount income">${formatCurrency(todayTotals.added)}</span>
+          </div>
+          <div class="today-activity-item">
+            <span class="today-activity-icon">🔴</span>
+            <span class="today-activity-label">Spent</span>
+            <span class="today-activity-amount expense">${formatCurrency(todayTotals.spent)}</span>
+          </div>
+          <div class="today-activity-item">
+            <span class="today-activity-icon">🔄</span>
+            <span class="today-activity-label">Transferred</span>
+            <span class="today-activity-amount transfer">${formatCurrency(todayTotals.transferred)}</span>
+          </div>
+        </div>
+      </div>
 
       <!-- Summary Cards -->
       <div class="summary-grid" style="grid-template-columns: repeat(4, 1fr);">
@@ -250,6 +283,13 @@ export function openAddTransactionModal(type = 'INCOME', onSaveSuccess) {
   const categories = isIncome ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   const accounts = dashboardState.accounts;
   const today = getTodayDate();
+  const todayDisplay = getLocalDateDisplay();
+
+  // Check offline
+  if (!isOnline()) {
+    toast.warning('📡 You\'re offline — Reconnect to save new transactions securely.');
+    return;
+  }
 
   const content = `
     <form id="tx-modal-form" novalidate>
@@ -272,9 +312,12 @@ export function openAddTransactionModal(type = 'INCOME', onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="tx-date">Date</label>
-        <input type="date" id="tx-date" class="form-input" value="${today}" required />
-        <div class="form-error" id="tx-date-error"></div>
+        <label class="form-label">Date</label>
+        <div class="date-locked-display">
+          ${todayDisplay}
+          <span class="date-lock-badge">🔒 Today</span>
+        </div>
+        <input type="hidden" id="tx-date" value="${today}" />
       </div>
 
       <div class="form-group">
@@ -358,15 +401,20 @@ export function openAddTransactionModal(type = 'INCOME', onSaveSuccess) {
         // Reset errors
         modal.querySelector('#tx-amount-error').textContent = '';
         modal.querySelector('#tx-account-error').textContent = '';
-        modal.querySelector('#tx-date-error').textContent = '';
         modal.querySelector('#tx-reason-error').textContent = '';
         modal.querySelector('#tx-category-error').textContent = '';
 
+        // Backend date validation — must be today
+        const dateErr = validateTodayDate(date);
+        if (dateErr) {
+          toast.error(dateErr);
+          return;
+        }
+
         let isValid = true;
-        const validation = validateTransaction({ amount, date, reason, category });
+        const validation = validateTransaction({ amount, date, reason, category }, true);
         if (!validation.isValid) {
           if (validation.errors.amount) modal.querySelector('#tx-amount-error').textContent = validation.errors.amount;
-          if (validation.errors.date) modal.querySelector('#tx-date-error').textContent = validation.errors.date;
           if (validation.errors.reason) modal.querySelector('#tx-reason-error').textContent = validation.errors.reason;
           if (validation.errors.category) modal.querySelector('#tx-category-error').textContent = validation.errors.category;
           isValid = false;
@@ -442,6 +490,13 @@ export function openAddTransactionModal(type = 'INCOME', onSaveSuccess) {
 export function openTransferModal(onSaveSuccess) {
   const accounts = dashboardState.accounts;
   const today = getTodayDate();
+  const todayDisplay = getLocalDateDisplay();
+
+  // Check offline
+  if (!isOnline()) {
+    toast.warning('📡 You\'re offline — Reconnect to save new transactions securely.');
+    return;
+  }
 
   const content = `
     <form id="transfer-modal-form" novalidate>
@@ -475,8 +530,12 @@ export function openTransferModal(onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="tr-date">Date</label>
-        <input type="date" id="tr-date" class="form-input" value="${today}" required />
+        <label class="form-label">Date</label>
+        <div class="date-locked-display">
+          ${todayDisplay}
+          <span class="date-lock-badge">🔒 Today</span>
+        </div>
+        <input type="hidden" id="tr-date" value="${today}" />
       </div>
 
       <div class="form-group">
@@ -544,6 +603,13 @@ export function openTransferModal(onSaveSuccess) {
         const date = modal.querySelector('#tr-date').value;
         const reason = modal.querySelector('#tr-reason').value;
         const notes = modal.querySelector('#tr-notes').value;
+
+        // Backend date validation — must be today
+        const dateErr = validateTodayDate(date);
+        if (dateErr) {
+          toast.error(dateErr);
+          return;
+        }
 
         // Reset errors
         modal.querySelector('#tr-amount-error').textContent = '';
@@ -640,8 +706,12 @@ export function openEditTransactionModal(tx, onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="edit-tx-date">Date</label>
-        <input type="date" id="edit-tx-date" class="form-input" value="${tx.date}" required />
+        <label class="form-label">Date</label>
+        <div class="date-locked-display">
+          📅 ${formatDate(tx.date)}
+          <span class="date-lock-badge">🔒 Locked</span>
+        </div>
+        <input type="hidden" id="edit-tx-date" value="${tx.date}" />
       </div>
 
       <div class="form-group">
@@ -680,7 +750,7 @@ export function openEditTransactionModal(tx, onSaveSuccess) {
         const category = modal.querySelector('#edit-tx-category').value;
         const notes = modal.querySelector('#edit-tx-notes').value;
 
-        const validation = validateTransaction({ amount, date, reason, category });
+        const validation = validateTransaction({ amount, date, reason, category }, false);
         if (!validation.isValid) return;
 
         const submitBtn = modal.querySelector('#btn-update-tx');
@@ -746,8 +816,12 @@ export function openEditTransferModal(tx, onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="edit-tr-date">Date</label>
-        <input type="date" id="edit-tr-date" class="form-input" value="${tx.date}" required />
+        <label class="form-label">Date</label>
+        <div class="date-locked-display">
+          📅 ${formatDate(tx.date)}
+          <span class="date-lock-badge">🔒 Locked</span>
+        </div>
+        <input type="hidden" id="edit-tr-date" value="${tx.date}" />
       </div>
 
       <div class="form-group">

@@ -2,10 +2,22 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="description" content="Money Control — Take control of your money. Track cash, bank accounts, UPI wallets, transfers, and expenses with a modern multi-account dashboard." />
   <meta name="theme-color" content="#6C63FF" />
+
+  <!-- PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Money Control" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="msapplication-TileColor" content="#6C63FF" />
+
+  <!-- Manifest & Icons -->
   <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+
   <title>💰 Money Control — Multi-Account Finance Tracker</title>
 
   <!-- Google Fonts: Inter -->
@@ -17,12 +29,15 @@
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 
   <!-- App Styles -->
-  <script type="module" crossorigin src="/assets/index-DTbcPhRs.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-Ble42Dgd.css">
+  <script type="module" crossorigin src="/assets/index-D4gffsG6.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-cRl3DNeH.css">
 </head>
 <body>
   <div id="app"></div>
   <div id="toast-container"></div>
   <div id="modal-root"></div>
+  <div id="pin-lock-root"></div>
+  <div id="pwa-install-banner"></div>
+  <div id="offline-banner"></div>
 </body>
 </html>

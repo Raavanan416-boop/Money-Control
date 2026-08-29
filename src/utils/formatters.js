@@ -78,11 +78,28 @@ export function getGreeting() {
 }
 
 /**
- * Get today's date in YYYY-MM-DD format
+ * Get today's date in YYYY-MM-DD format (LOCAL timezone, not UTC)
  */
 export function getTodayDate() {
   const now = new Date();
-  return now.toISOString().split('T')[0];
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Get today's date display for locked date fields
+ * e.g., "📅 Today — 29 Aug 2026"
+ */
+export function getLocalDateDisplay() {
+  const now = new Date();
+  const formatted = now.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+  return `📅 Today — ${formatted}`;
 }
 
 /**

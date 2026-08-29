@@ -16,7 +16,7 @@ export function renderAuthPage() {
     <div class="auth-page">
       <div class="auth-container">
         <div class="auth-logo">
-          <span class="auth-logo-icon">💰</span>
+          <img src="/icon-192.png" alt="Money Control" class="auth-logo-icon" style="width: 72px; height: 72px; border-radius: 18px; box-shadow: 0 8px 32px rgba(108, 99, 255, 0.3);" />
           <h1 class="auth-logo-title">Money Control</h1>
           <p class="auth-logo-tagline">Take control of your money.</p>
         </div>
