@@ -117,6 +117,12 @@
   justify-content: space-between;
   padding: 14px 16px;
   transition: background var(--transition-fast);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(108, 99, 255, 0.15);
+  user-select: none;
+  position: relative;
+  z-index: 1;
 }
 
 .account-compact-row:not(:last-child) {

@@ -51,11 +51,11 @@ export function renderAccountsPage(appState) {
       </div>
 
       <!-- Account Cards Grid -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6);">
+      <div class="accounts-page-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6);">
         ${accounts.map(acc => {
           const bal = balances[acc.id] || 0;
           return `
-            <div class="card hover-lift" style="cursor: pointer; position: relative;" data-account-id="${acc.id}">
+            <div class="card hover-lift account-card-item" style="cursor: pointer; position: relative; touch-action: manipulation; -webkit-tap-highlight-color: rgba(108, 99, 255, 0.15); user-select: none;" data-account-id="${acc.id}">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3);">
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <div style="font-size: 1.8rem; width: 44px; height: 44px; border-radius: 12px; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">
@@ -232,8 +232,16 @@ export function attachAccountsListeners(refreshData) {
   const backBtn = document.getElementById('btn-back-to-accounts');
   if (backBtn) {
     backBtn.onclick = () => {
+      const origin = window.appState?.accountOriginPage;
       state.selectedAccountId = null;
-      if (window.appState) window.appState.selectedAccountId = null;
+      if (window.appState) {
+        window.appState.selectedAccountId = null;
+        window.appState.accountOriginPage = null;
+      }
+      if (origin === 'dashboard') {
+        if (window.appState) window.appState.activePage = 'dashboard';
+        window.location.hash = '#/dashboard';
+      }
       if (refreshData) refreshData();
     };
     return;
@@ -243,15 +251,22 @@ export function attachAccountsListeners(refreshData) {
   const addAccBtn = document.getElementById('btn-add-account-modal');
   if (addAccBtn) addAccBtn.onclick = () => openAddAccountModal(refreshData);
 
-  // Click on account card to view details
-  document.querySelectorAll('[data-account-id]').forEach(card => {
-    card.onclick = () => {
+  // Click/Tap on account card to view details (Event Delegation)
+  const grid = document.querySelector('.accounts-page-grid') || document.querySelector('.page');
+  if (grid) {
+    grid.onclick = (e) => {
+      const card = e.target.closest('[data-account-id]');
+      if (!card) return;
+      if (e.target.closest('button, a, input, select')) return;
+
       const accId = card.dataset.accountId;
+      if (!accId) return;
+
       state.selectedAccountId = accId;
       if (window.appState) window.appState.selectedAccountId = accId;
       if (refreshData) refreshData();
     };
-  });
+  }
 }
 
 /**

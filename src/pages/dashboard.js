@@ -216,14 +216,25 @@ export function attachDashboardListeners(navigateFn, refreshData) {
     };
   }
 
-  // Click on account row to view details
-  document.querySelectorAll('.account-compact-row[data-account-id]').forEach(row => {
-    row.onclick = () => {
+  // Click/Tap on account row to view details (Event Delegation for 100% Mobile + Desktop reliability)
+  const accContainer = document.querySelector('.account-rows-container');
+  if (accContainer) {
+    const handleAccountSelect = (e) => {
+      const row = e.target.closest('[data-account-id]');
+      if (!row) return;
+      
       const accId = row.dataset.accountId;
-      if (window.appState) window.appState.selectedAccountId = accId;
+      if (!accId) return;
+
+      if (window.appState) {
+        window.appState.selectedAccountId = accId;
+        window.appState.accountOriginPage = 'dashboard';
+      }
       navigateFn('accounts');
     };
-  });
+
+    accContainer.onclick = handleAccountSelect;
+  }
 
   const viewAllBtn = document.getElementById('link-view-all-tx');
   if (viewAllBtn) viewAllBtn.onclick = () => navigateFn('transactions');
