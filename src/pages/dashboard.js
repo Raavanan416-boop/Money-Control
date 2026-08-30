@@ -108,7 +108,7 @@ export function renderDashboardPage(state) {
           ${accounts.length > 0 ? accounts.map(acc => {
             const bal = balances[acc.id] || 0;
             return `
-              <div class="account-compact-row">
+              <div class="account-compact-row" data-account-id="${acc.id}" style="cursor: pointer;">
                 <div class="account-row-left">
                   <span class="account-row-icon">${acc.icon || '🏦'}</span>
                   <span class="account-row-name">${acc.name}</span>
@@ -209,7 +209,21 @@ export function attachDashboardListeners(navigateFn, refreshData) {
   });
 
   const manageAccLink = document.getElementById('link-manage-accounts');
-  if (manageAccLink) manageAccLink.onclick = () => navigateFn('accounts');
+  if (manageAccLink) {
+    manageAccLink.onclick = () => {
+      if (window.appState) window.appState.selectedAccountId = null;
+      navigateFn('accounts');
+    };
+  }
+
+  // Click on account row to view details
+  document.querySelectorAll('.account-compact-row[data-account-id]').forEach(row => {
+    row.onclick = () => {
+      const accId = row.dataset.accountId;
+      if (window.appState) window.appState.selectedAccountId = accId;
+      navigateFn('accounts');
+    };
+  });
 
   const viewAllBtn = document.getElementById('link-view-all-tx');
   if (viewAllBtn) viewAllBtn.onclick = () => navigateFn('transactions');

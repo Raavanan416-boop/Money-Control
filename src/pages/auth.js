@@ -202,7 +202,6 @@ export function attachAuthListeners(onAuthSuccess) {
       try {
         await login(email, password);
         toast.success('Logged in successfully!');
-        if (onAuthSuccess) onAuthSuccess();
       } catch (err) {
         console.error('Login failure:', err);
         const errMsg = getAuthErrorMessage(err);
@@ -245,15 +244,20 @@ export function attachAuthListeners(onAuthSuccess) {
       }
 
       const submitBtn = document.getElementById('btn-register-submit');
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = `<span class="spinner"></span> Creating Account...`;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span class="spinner"></span> Creating Account...`;
+      }
 
       try {
         await register(name, email, password);
         toast.success('Account created successfully!');
-        if (onAuthSuccess) onAuthSuccess();
       } catch (err) {
-        toast.error(getAuthErrorMessage(err));
+        console.error('Registration Error:', err);
+        const errMsg = getAuthErrorMessage(err);
+        toast.error(errMsg);
+        const emailErrDiv = document.getElementById('reg-email-error');
+        if (emailErrDiv) emailErrDiv.textContent = errMsg;
       } finally {
         const currentBtn = document.getElementById('btn-register-submit');
         if (currentBtn) {

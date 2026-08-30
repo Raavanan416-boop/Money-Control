@@ -2,6 +2,8 @@
 // 💰 Money Control V3 — PIN Lock Screen
 // ============================================
 
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { auth } from '../config/firebase.js';
 import {
   hashPin,
   savePinHash,
@@ -733,8 +735,6 @@ async function handleForgotPinVerify() {
 
   try {
     // Re-authenticate using Firebase
-    const { EmailAuthProvider, reauthenticateWithCredential } = await import('firebase/auth');
-    const { auth } = await import('../config/firebase.js');
     const user = auth.currentUser;
 
     if (!user || !user.email) {

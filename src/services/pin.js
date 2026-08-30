@@ -38,16 +38,20 @@ export async function savePinHash(uid, pinHashValue) {
  * Get PIN data from Firestore
  */
 export async function getPinData(uid) {
-  const docSnap = await getDoc(doc(db, 'users', uid));
-  if (docSnap.exists()) {
-    const data = docSnap.data();
-    return {
-      pinHash: data.pinHash || null,
-      pinEnabled: data.pinEnabled || false,
-      pinSetupPromptShown: data.pinSetupPromptShown || false,
-      autoLockTimeout: data.autoLockTimeout !== undefined ? data.autoLockTimeout : 5,
-      pinLength: PIN_LENGTH
-    };
+  try {
+    const docSnap = await getDoc(doc(db, 'users', uid));
+    if (docSnap && docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        pinHash: data.pinHash || null,
+        pinEnabled: data.pinEnabled || false,
+        pinSetupPromptShown: data.pinSetupPromptShown || false,
+        autoLockTimeout: data.autoLockTimeout !== undefined ? data.autoLockTimeout : 5,
+        pinLength: PIN_LENGTH
+      };
+    }
+  } catch (e) {
+    console.warn('getPinData warning:', e);
   }
   return { pinHash: null, pinEnabled: false, pinSetupPromptShown: false, autoLockTimeout: 5, pinLength: PIN_LENGTH };
 }

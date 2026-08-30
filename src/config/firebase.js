@@ -1,37 +1,55 @@
 // ============================================
 // 💰 Money Control — Firebase Configuration
 // ============================================
-// 
-// ⚠️ SETUP INSTRUCTIONS:
-// 1. Go to https://console.firebase.google.com
-// 2. Create a new project (or use an existing one)
-// 3. Add a Web App in Project Settings > General > Your Apps
-// 4. Copy the config object and paste it below
-// 5. Enable Authentication > Email/Password in the Firebase Console
-// 6. Create a Firestore Database (start in test mode, then apply security rules)
-//
-// Replace the placeholder values below with your actual Firebase config:
 
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeApp, getApp, getApps } from 'firebase/app';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyCNi1a6jLObH6P89o-Bpw1zpViF-iS0_-k",
-    authDomain: "money-control-e6af5.firebaseapp.com",
-    databaseURL: "https://money-control-e6af5-default-rtdb.firebaseio.com",
-    projectId: "money-control-e6af5",
-    storageBucket: "money-control-e6af5.firebasestorage.app",
-    messagingSenderId: "490577558965",
-    appId: "1:490577558965:web:09275a065a09844f1eadfc",
-    measurementId: "G-JTLBM89W1W"
-  };
+const firebaseConfig = {
+  apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || "AIzaSyCNi1a6jLObH6P89o-Bpw1zpViF-iS0_-k",
+  authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || "money-control-e6af5.firebaseapp.com",
+  databaseURL: import.meta.env?.VITE_FIREBASE_DATABASE_URL || "https://money-control-e6af5-default-rtdb.firebaseio.com",
+  projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || "money-control-e6af5",
+  storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || "money-control-e6af5.firebasestorage.app",
+  messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "490577558965",
+  appId: import.meta.env?.VITE_FIREBASE_APP_ID || "1:490577558965:web:09275a065a09844f1eadfc",
+  measurementId: import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID || "G-JTLBM89W1W"
+};
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+/**
+ * Validate that essential public Firebase configuration values are present.
+ */
+export function validateFirebaseConfig() {
+  const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
+  const missing = requiredKeys.filter(key => !firebaseConfig[key] || String(firebaseConfig[key]).includes('YOUR_'));
+  
+  if (missing.length > 0) {
+    console.error('⚠️ Firebase configuration is incomplete. Missing fields:', missing.join(', '));
+    return { isValid: false, missing };
+  }
+  return { isValid: true, missing: [] };
+}
 
-// Initialize Services
+// Initialize Firebase App instance as a singleton (prevents HMR duplicate app errors)
+export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+// Initialize Firebase Services as singletons
 export const auth = getAuth(app);
+
+// Safely configure persistence with fallback to prevent IndexedDB lock stalls
+try {
+  setPersistence(auth, browserLocalPersistence).catch((err) => {
+    console.warn('browserLocalPersistence warning:', err);
+  });
+} catch (e) {
+  console.warn('setPersistence warning:', e);
+}
+
 export const db = getFirestore(app);
+
+export function getDb() {
+  return db || getFirestore(app);
+}
 
 export default app;

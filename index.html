@@ -25,19 +25,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
-  <!-- Import Map for ES Module Specifiers -->
-  <script type="importmap">
-    {
-      "imports": {
-        "firebase/app": "/node_modules/firebase/app/dist/index.mjs",
-        "firebase/auth": "/node_modules/firebase/auth/dist/esm/index.esm.js",
-        "firebase/firestore": "/node_modules/firebase/firestore/dist/index.mjs",
-        "chart.js": "/node_modules/chart.js/auto/auto.js"
-      }
-    }
-  </script>
-
-  <!-- App Styles -->
+  <!-- App Styles (Used for Vite dev server) -->
   <link rel="stylesheet" href="/src/styles/index.css" />
   <link rel="stylesheet" href="/src/styles/animations.css" />
   <link rel="stylesheet" href="/src/styles/components.css" />
@@ -54,25 +42,29 @@
   <div id="pin-lock-root"></div>
   <div id="pwa-install-banner"></div>
   <div id="offline-banner"></div>
-  <!-- Smart Dual Loader: Vite Dev Server + Static HTTP Server (live-server port 4000) fallback -->
-  <script type="module">
-    window.__appLoaded = false;
-    window.addEventListener('DOMContentLoaded', () => {
-      setTimeout(() => {
-        if (!window.__appLoaded) {
-          console.warn('Vite dev server not active. Mounting application bundle...');
-          const script = document.createElement('script');
-          script.type = 'module';
-          script.src = '/dist/assets/app-bundle.js';
-          document.body.appendChild(script);
-        }
-      }, 250);
-    });
-  </script>
 
-  <script type="module">
-    import '/src/main.js';
-    window.__appLoaded = true;
+  <!-- Primary Entry Point for Vite (npm run dev / npm run build) -->
+  <script type="module" src="/src/main.js"></script>
+
+  <!-- Fallback for static servers (e.g. live-server on port 4000 without Vite transpile) -->
+  <script>
+    window.addEventListener('error', function(e) {
+      if (e.message && (e.message.includes('module specifier') || e.message.includes('import'))) {
+        console.info('Static HTTP server detected without Vite transpiler. Loading bundle...');
+        if (!document.getElementById('fallback-bundle-js')) {
+          var css = document.createElement('link');
+          css.rel = 'stylesheet';
+          css.href = '/dist/assets/index.css';
+          document.head.appendChild(css);
+
+          var js = document.createElement('script');
+          js.id = 'fallback-bundle-js';
+          js.type = 'module';
+          js.src = '/dist/assets/app-bundle.js';
+          document.body.appendChild(js);
+        }
+      }
+    }, true);
   </script>
 </body>
 </html>

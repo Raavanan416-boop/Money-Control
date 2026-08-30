@@ -54,47 +54,173 @@ export function calculateAccountBalances(accounts, transactions) {
 }
 
 /**
- * Calculate transaction breakdown for a specific account
+ * Calculate complete transaction history with running balance for a specific account.
  */
-export function calculateAccountStats(account, transactions) {
+export function calculateAccountHistory(account, transactions, accounts = []) {
+  if (!account) {
+    return {
+      account: null,
+      balance: 0,
+      totalAdded: 0,
+      totalSpent: 0,
+      totalTransferredIn: 0,
+      totalTransferredOut: 0,
+      count: 0,
+      history: []
+    };
+  }
+
   const accId = account.id;
-  const accTx = transactions.filter(tx =>
+
+  // Filter transactions for this specific account only
+  const accTx = (transactions || []).filter(tx =>
     tx.sourceAccountId === accId || tx.destinationAccountId === accId
   );
 
-  let totalAdded = 0;
-  let totalSpent = 0;
-  let totalTransferredOut = 0;
-  let totalTransferredIn = 0;
-
-  accTx.forEach(tx => {
-    const amount = Number(tx.amount) || 0;
-    if (tx.type === 'INCOME' && tx.destinationAccountId === accId) {
-      totalAdded += amount;
-    } else if (tx.type === 'EXPENSE' && tx.sourceAccountId === accId) {
-      totalSpent += amount;
-    } else if (tx.type === 'TRANSFER') {
-      if (tx.sourceAccountId === accId) {
-        totalTransferredOut += amount;
-      }
-      if (tx.destinationAccountId === accId) {
-        totalTransferredIn += amount;
-      }
+  // Sort chronologically (ascending) for accurate running balance computation
+  const sortedAsc = [...accTx].sort((a, b) => {
+    const dateDiff = (a.date || '').localeCompare(b.date || '');
+    if (dateDiff !== 0) return dateDiff;
+    const timeA = a.time || a.createdAt || '';
+    const timeB = b.time || b.createdAt || '';
+    if (timeA && timeB) {
+      return timeA.localeCompare(timeB);
     }
+    return 0;
   });
 
-  const balance = calculateAccountBalance(account, transactions);
+  let runningBalance = Number(account.initialBalance) || 0;
+  let totalAdded = 0;
+  let totalSpent = 0;
+  let totalTransferredIn = 0;
+  let totalTransferredOut = 0;
+
+  const historyAsc = sortedAsc.map(tx => {
+    const amount = Number(tx.amount) || 0;
+    const prevBalance = runningBalance;
+    let displayType = tx.type;
+    let indicator = '🟢';
+    let typeLabel = 'Money Added';
+    let actionLabel = 'Money Added';
+    let resultLabel = 'Current Balance';
+    let amountSign = '+';
+    let amountColor = 'var(--income)';
+    let transferAccountName = '';
+
+    if (tx.type === 'INCOME') {
+      if (tx.destinationAccountId === accId) {
+        runningBalance += amount;
+        totalAdded += amount;
+        displayType = 'INCOME';
+        indicator = '🟢';
+        typeLabel = 'Income';
+        actionLabel = 'Money Added';
+        resultLabel = 'Current Balance';
+        amountSign = '+';
+        amountColor = 'var(--income)';
+      }
+    } else if (tx.type === 'EXPENSE') {
+      if (tx.sourceAccountId === accId) {
+        runningBalance -= amount;
+        totalSpent += amount;
+        displayType = 'EXPENSE';
+        indicator = '🔴';
+        typeLabel = 'Expense';
+        actionLabel = 'Expense';
+        resultLabel = 'Remaining Balance';
+        amountSign = '−';
+        amountColor = 'var(--expense)';
+      }
+    } else if (tx.type === 'TRANSFER') {
+      if (tx.destinationAccountId === accId) {
+        runningBalance += amount;
+        totalTransferredIn += amount;
+        totalAdded += amount;
+        displayType = 'TRANSFER_IN';
+        indicator = '🟣';
+        typeLabel = 'Transfer IN';
+        actionLabel = 'Received';
+        resultLabel = 'Balance After';
+        amountSign = '+';
+        amountColor = 'var(--primary-light)';
+
+        const srcAcc = accounts.find(a => a.id === tx.sourceAccountId);
+        if (srcAcc) transferAccountName = srcAcc.name;
+      } else if (tx.sourceAccountId === accId) {
+        runningBalance -= amount;
+        totalTransferredOut += amount;
+        totalSpent += amount;
+        displayType = 'TRANSFER_OUT';
+        indicator = '🟣';
+        typeLabel = 'Transfer OUT';
+        actionLabel = 'Transferred';
+        resultLabel = 'Balance After';
+        amountSign = '−';
+        amountColor = 'var(--primary-light)';
+
+        const destAcc = accounts.find(a => a.id === tx.destinationAccountId);
+        if (destAcc) transferAccountName = destAcc.name;
+      }
+    }
+
+    // Determine stored historical balances or fallback to running balance calculation
+    let previousBalance = prevBalance;
+    let balanceAfter = runningBalance;
+
+    if (tx.type === 'TRANSFER') {
+      if (displayType === 'TRANSFER_OUT' && tx.sourcePreviousBalance !== undefined) {
+        previousBalance = Number(tx.sourcePreviousBalance);
+        balanceAfter = Number(tx.sourceBalanceAfter);
+      } else if (displayType === 'TRANSFER_IN' && tx.destinationPreviousBalance !== undefined) {
+        previousBalance = Number(tx.destinationPreviousBalance);
+        balanceAfter = Number(tx.destinationBalanceAfter);
+      } else if (tx.previousBalance !== undefined && tx.balanceAfter !== undefined) {
+        previousBalance = Number(tx.previousBalance);
+        balanceAfter = Number(tx.balanceAfter);
+      }
+    } else if (tx.previousBalance !== undefined && tx.balanceAfter !== undefined) {
+      previousBalance = Number(tx.previousBalance);
+      balanceAfter = Number(tx.balanceAfter);
+    }
+
+    return {
+      ...tx,
+      displayType,
+      indicator,
+      typeLabel,
+      actionLabel,
+      resultLabel,
+      amountSign,
+      amountColor,
+      transferAccountName,
+      previousBalance,
+      balanceAfter
+    };
+  });
+
+  // Display newest transactions first in history
+  const historyDesc = [...historyAsc].reverse();
 
   return {
     account,
-    balance,
+    balance: runningBalance,
     totalAdded,
     totalSpent,
-    totalTransferredOut,
     totalTransferredIn,
+    totalTransferredOut,
+    count: accTx.length,
+    history: historyDesc,
     transactions: accTx
   };
 }
+
+/**
+ * Calculate transaction breakdown for a specific account
+ */
+export function calculateAccountStats(account, transactions) {
+  return calculateAccountHistory(account, transactions);
+}
+
 
 /**
  * Calculate total income across ALL accounts (excludes TRANSFERS)

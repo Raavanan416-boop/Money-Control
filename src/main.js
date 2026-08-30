@@ -45,6 +45,7 @@ const appState = {
   transactions: [],
   budgets: [],
   activePage: 'dashboard',
+  selectedAccountId: null,
   unsubscribeAccounts: null,
   unsubscribeTx: null,
   authLoading: true,
@@ -56,6 +57,9 @@ const appState = {
   autoLockTimeout: 5, // minutes
   lastActivityTime: Date.now()
 };
+
+window.appState = appState;
+
 
 // Auto-lock timer
 let autoLockTimer = null;
@@ -176,7 +180,7 @@ async function loadUserData(uid) {
   appState.dashboardError = null;
 
   try {
-    const profileTimeout = new Promise((resolve) => setTimeout(() => resolve(null), 8000));
+    const profileTimeout = new Promise((resolve) => setTimeout(() => resolve(null), 3000));
     let profile = await Promise.race([getUserProfile(uid), profileTimeout]);
 
     // Safely auto-create user profile if missing or timed out
@@ -218,7 +222,14 @@ async function loadUserData(uid) {
     }
 
     // Load PIN data
-    const pinData = await getPinData(uid);
+    let pinData;
+    try {
+      pinData = await getPinData(uid);
+    } catch (e) {
+      console.warn('getPinData warning in loadUserData:', e);
+      pinData = { pinHash: null, pinEnabled: false, pinSetupPromptShown: true, autoLockTimeout: 5 };
+    }
+
     appState.pinEnabled = pinData.pinEnabled;
     appState.pinHash = pinData.pinHash;
     appState.autoLockTimeout = pinData.autoLockTimeout !== undefined ? pinData.autoLockTimeout : 5;
@@ -286,14 +297,7 @@ async function loadUserData(uid) {
 
 function renderAuthView() {
   appEl.innerHTML = renderAuthPage();
-  attachAuthListeners(async () => {
-    const user = getCurrentUser();
-    if (user) {
-      appState.user = user;
-      renderLoadingView();
-      await loadUserData(user.uid);
-    }
-  });
+  attachAuthListeners();
 }
 
 function renderOnboardingView() {
@@ -416,6 +420,9 @@ function attachCurrentPageListeners(page) {
 }
 
 function navigateTo(page) {
+  if (page !== 'accounts') {
+    appState.selectedAccountId = null;
+  }
   appState.activePage = page;
   window.location.hash = `#/${page}`;
 }

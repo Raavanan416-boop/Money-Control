@@ -1,12 +1,11 @@
 // ============================================
-// 💰 Money Control V2 — Accounts Page Component
+// 💰 Money Control V3 — Accounts Page & Dedicated Account Details Component
 // ============================================
 
-import { formatCurrency } from '../utils/formatters.js';
-import { calculateAccountBalances, calculateAccountStats } from '../utils/calculations.js';
+import { formatCurrency, formatDate, formatTime } from '../utils/formatters.js';
+import { calculateAccountBalances, calculateAccountHistory } from '../utils/calculations.js';
 import { createAccount, updateAccount, deleteAccountDoc } from '../services/firestore.js';
 import { openModal, closeModal, showConfirm } from '../components/modal.js';
-import { renderTransactionList } from '../components/transaction-card.js';
 import { validateName, validateAmount } from '../utils/validators.js';
 import { toast } from '../utils/toast.js';
 
@@ -14,15 +13,25 @@ let state = {
   user: null,
   profile: null,
   accounts: [],
-  transactions: []
+  transactions: [],
+  selectedAccountId: null
 };
 
 /**
- * Render Accounts Page HTML
+ * Render Accounts Page HTML (List or Dedicated Details Screen)
  */
 export function renderAccountsPage(appState) {
   state = { ...state, ...appState };
-  const { accounts, transactions } = state;
+  const { accounts, transactions, selectedAccountId } = state;
+
+  if (selectedAccountId) {
+    const selectedAcc = accounts.find(a => a.id === selectedAccountId);
+    if (selectedAcc) {
+      return renderAccountDetailsScreen(selectedAcc, transactions);
+    }
+  }
+
+  // Render Accounts List View
   const { balances, totalMoney } = calculateAccountBalances(accounts, transactions);
 
   return `
@@ -73,9 +82,163 @@ export function renderAccountsPage(appState) {
 }
 
 /**
+ * Render Dedicated Account Details View Screen
+ */
+function renderAccountDetailsScreen(account, transactions) {
+  const stats = calculateAccountHistory(account, transactions, state.accounts);
+
+  return `
+    <div class="page animate-fade-in account-details-page">
+      <!-- Back button -->
+      <div style="margin-bottom: var(--space-4);">
+        <button class="btn btn-ghost btn-sm" id="btn-back-to-accounts" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text-secondary); cursor: pointer; border: none; background: transparent; padding: 6px 0; font-size: 0.9375rem;">
+          ← Back
+        </button>
+      </div>
+
+      <!-- Account Header & Current Balance -->
+      <div class="card card-glass" style="margin-bottom: var(--space-5); padding: 24px; text-align: center; border-radius: var(--radius-2xl);">
+        <div style="font-size: 3rem; margin-bottom: 8px;">${account.icon || '🏦'}</div>
+        <h1 style="font-size: var(--fs-2xl); font-weight: var(--fw-extrabold); color: var(--text-primary); margin-bottom: 4px;">
+          ${account.name}
+        </h1>
+        ${account.type ? `<div style="font-size: var(--fs-xs); color: var(--text-tertiary); margin-bottom: 12px;">${account.type} ${account.last4Digits ? `(••${account.last4Digits})` : ''}</div>` : ''}
+        <div style="font-size: var(--fs-xs); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">
+          Current Balance
+        </div>
+        <div style="font-size: var(--fs-3xl); font-weight: 900; color: ${stats.balance < 0 ? 'var(--expense)' : 'var(--text-primary)'}; margin-top: 4px; letter-spacing: -0.02em;">
+          ${formatCurrency(stats.balance)}
+        </div>
+      </div>
+
+      <!-- SUMMARY Section -->
+      <div class="card card-flat" style="margin-bottom: var(--space-6); padding: 20px; border-radius: var(--radius-xl);">
+        <div style="font-size: 0.8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 16px;">
+          SUMMARY
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center;">
+          <div style="background: var(--bg-tertiary); padding: 12px 8px; border-radius: var(--radius-md);">
+            <div style="font-size: var(--fs-xs); color: var(--text-secondary); margin-bottom: 4px; font-weight: 500;">Money Added</div>
+            <div style="font-weight: var(--fw-bold); font-size: var(--fs-md); color: var(--income);">${formatCurrency(stats.totalAdded)}</div>
+          </div>
+          <div style="background: var(--bg-tertiary); padding: 12px 8px; border-radius: var(--radius-md);">
+            <div style="font-size: var(--fs-xs); color: var(--text-secondary); margin-bottom: 4px; font-weight: 500;">Money Spent</div>
+            <div style="font-weight: var(--fw-bold); font-size: var(--fs-md); color: var(--expense);">${formatCurrency(stats.totalSpent)}</div>
+          </div>
+          <div style="background: var(--bg-tertiary); padding: 12px 8px; border-radius: var(--radius-md);">
+            <div style="font-size: var(--fs-xs); color: var(--text-secondary); margin-bottom: 4px; font-weight: 500;">Transactions</div>
+            <div style="font-weight: var(--fw-bold); font-size: var(--fs-md); color: var(--text-primary);">${stats.count}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MONEY HISTORY Section -->
+      <div class="section">
+        <div style="font-size: 0.8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 16px;">
+          MONEY HISTORY
+        </div>
+
+        ${stats.history.length > 0 ? `
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            ${stats.history.map(tx => renderHistoryRow(tx, account)).join('')}
+          </div>
+        ` : `
+          <div class="card card-flat" style="padding: 36px 16px; text-align: center; color: var(--text-tertiary);">
+            <div style="font-size: 2.2rem; margin-bottom: 8px;">📜</div>
+            <div style="font-size: var(--fs-sm); font-weight: 500;">No transaction history for this account yet.</div>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render single transaction card for Account Details View with complete 3-step Balance Flow
+ */
+function renderHistoryRow(tx, account) {
+  let displayReason = tx.reason || tx.category || tx.typeLabel;
+
+  if (tx.type === 'TRANSFER') {
+    if (tx.displayType === 'TRANSFER_IN') {
+      displayReason = tx.reason
+        ? tx.reason
+        : (tx.transferAccountName ? `Transfer from ${tx.transferAccountName}` : 'Transfer Received');
+    } else if (tx.displayType === 'TRANSFER_OUT') {
+      displayReason = tx.reason
+        ? tx.reason
+        : (tx.transferAccountName ? `Transfer to ${tx.transferAccountName}` : 'Transferred');
+    }
+  }
+
+  const formattedDate = formatDate(tx.date);
+  const formattedTime = tx.createdAt ? formatTime(tx.createdAt) : '';
+
+  return `
+    <div class="card card-flat history-item-card" style="padding: 16px 18px; border-radius: var(--radius-xl); background: var(--bg-card); border: 1px solid var(--border-color); margin-bottom: 4px;">
+      
+      <!-- Card Header: Indicator & Reason -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+          <span style="font-size: 1.25rem;">${tx.indicator}</span>
+          <div style="font-weight: 700; font-size: 0.9375rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            ${displayReason}
+          </div>
+        </div>
+      </div>
+
+      <!-- Balance Flow Box -->
+      <div style="background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: 12px 14px; font-size: 0.875rem; margin-bottom: 12px;">
+        
+        <!-- Previous Balance -->
+        <div style="display: flex; justify-content: space-between; align-items: center; color: var(--text-secondary); margin-bottom: 6px;">
+          <span>Previous Balance</span>
+          <span style="font-weight: 600; color: var(--text-primary);">${formatCurrency(tx.previousBalance)}</span>
+        </div>
+
+        <!-- Transaction Action (Expense / Money Added / Transferred) -->
+        <div style="display: flex; justify-content: space-between; align-items: center; color: var(--text-secondary); margin-bottom: 8px;">
+          <span>${tx.actionLabel}</span>
+          <span style="font-weight: 700; color: ${tx.amountColor};">${tx.amountSign}${formatCurrency(tx.amount)}</span>
+        </div>
+
+        <!-- Divider Line -->
+        <div style="border-top: 1px dashed var(--border-color); margin: 6px 0 8px 0;"></div>
+
+        <!-- Balance After (Remaining Balance / Current Balance) -->
+        <div style="display: flex; justify-content: space-between; align-items: center; font-weight: 700;">
+          <span style="color: var(--text-primary);">${tx.resultLabel}</span>
+          <span style="font-size: 0.9375rem; color: ${tx.balanceAfter < 0 ? 'var(--expense)' : 'var(--income)'}; font-weight: 800;">${formatCurrency(tx.balanceAfter)}</span>
+        </div>
+
+      </div>
+
+      <!-- Card Footer: Type & Timestamp -->
+      <div style="font-size: 0.75rem; color: var(--text-tertiary); display: flex; align-items: center; gap: 6px;">
+        <span>${tx.typeLabel}</span>
+        <span>•</span>
+        <span>${formattedDate}${formattedTime ? ` at ${formattedTime}` : ''}</span>
+      </div>
+
+    </div>
+  `;
+}
+
+/**
  * Attach Accounts Listeners
  */
 export function attachAccountsListeners(refreshData) {
+  // If in Account Details view
+  const backBtn = document.getElementById('btn-back-to-accounts');
+  if (backBtn) {
+    backBtn.onclick = () => {
+      state.selectedAccountId = null;
+      if (window.appState) window.appState.selectedAccountId = null;
+      if (refreshData) refreshData();
+    };
+    return;
+  }
+
   // Add Account button
   const addAccBtn = document.getElementById('btn-add-account-modal');
   if (addAccBtn) addAccBtn.onclick = () => openAddAccountModal(refreshData);
@@ -84,8 +247,9 @@ export function attachAccountsListeners(refreshData) {
   document.querySelectorAll('[data-account-id]').forEach(card => {
     card.onclick = () => {
       const accId = card.dataset.accountId;
-      const acc = state.accounts.find(a => a.id === accId);
-      if (acc) openAccountDetailModal(acc, refreshData);
+      state.selectedAccountId = accId;
+      if (window.appState) window.appState.selectedAccountId = accId;
+      if (refreshData) refreshData();
     };
   });
 }
@@ -167,177 +331,6 @@ export function openAddAccountModal(onSuccess) {
           toast.error('Unable to create account.');
           submitBtn.disabled = false;
           submitBtn.innerHTML = 'Create Account';
-        }
-      };
-    }
-  });
-}
-
-/**
- * Account Detail Modal
- */
-function openAccountDetailModal(acc, refreshData) {
-  const stats = calculateAccountStats(acc, state.transactions);
-
-  const content = `
-    <div style="margin-bottom: var(--space-4);">
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: var(--space-3);">
-        <span style="font-size: 2.5rem;">${acc.icon || '🏦'}</span>
-        <div>
-          <h3 style="font-size: var(--fs-xl); font-weight: var(--fw-bold);">${acc.name}</h3>
-          <p style="font-size: var(--fs-xs); color: var(--text-secondary);">${acc.type} ${acc.last4Digits ? `(••${acc.last4Digits})` : ''}</p>
-        </div>
-      </div>
-
-      <div class="card card-glass" style="margin-bottom: var(--space-4); text-align: center; padding: var(--space-4);">
-        <div style="font-size: var(--fs-xs); color: var(--text-secondary); text-transform: uppercase;">Current Account Balance</div>
-        <div style="font-size: var(--fs-3xl); font-weight: var(--fw-extrabold); color: ${stats.balance < 0 ? 'var(--expense)' : 'var(--income)'};">
-          ${formatCurrency(stats.balance)}
-        </div>
-      </div>
-
-      <!-- Account Breakdown Stats -->
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: var(--space-4);">
-        <div class="card card-flat" style="padding: 10px;">
-          <div style="font-size: var(--fs-xs); color: var(--text-secondary);">Total Added</div>
-          <div style="font-weight: var(--fw-bold); color: var(--income);">${formatCurrency(stats.totalAdded)}</div>
-        </div>
-        <div class="card card-flat" style="padding: 10px;">
-          <div style="font-size: var(--fs-xs); color: var(--text-secondary);">Total Spent</div>
-          <div style="font-weight: var(--fw-bold); color: var(--expense);">${formatCurrency(stats.totalSpent)}</div>
-        </div>
-        <div class="card card-flat" style="padding: 10px;">
-          <div style="font-size: var(--fs-xs); color: var(--text-secondary);">Transferred Out</div>
-          <div style="font-weight: var(--fw-bold); color: var(--primary);">${formatCurrency(stats.totalTransferredOut)}</div>
-        </div>
-        <div class="card card-flat" style="padding: 10px;">
-          <div style="font-size: var(--fs-xs); color: var(--text-secondary);">Transferred In</div>
-          <div style="font-weight: var(--fw-bold); color: var(--info);">${formatCurrency(stats.totalTransferredIn)}</div>
-        </div>
-      </div>
-
-      <h4 style="font-size: var(--fs-md); font-weight: var(--fw-bold); margin-bottom: var(--space-2);">Account Transactions</h4>
-      <div style="max-height: 250px; overflow-y: auto;">
-        ${stats.transactions.length > 0
-          ? renderTransactionList(stats.transactions, { showActions: false, showDate: true })
-          : '<div style="font-size: var(--fs-sm); color: var(--text-tertiary); text-align: center; padding: 16px;">No transactions for this account.</div>'
-        }
-      </div>
-    </div>
-  `;
-
-  const footer = `
-    <button class="btn btn-outline btn-sm" id="btn-edit-account">✏️ Edit Account</button>
-    <button class="btn btn-danger btn-sm" id="btn-delete-account">🗑️ Delete Account</button>
-  `;
-
-  openModal({
-    title: `Account Details`,
-    content,
-    footer,
-    onOpen: (modal) => {
-      // Edit Account
-      modal.querySelector('#btn-edit-account').onclick = () => {
-        closeModal();
-        openEditAccountModal(acc, refreshData);
-      };
-
-      // Delete Account
-      modal.querySelector('#btn-delete-account').onclick = async () => {
-        closeModal();
-        const confirmed = await showConfirm({
-          icon: '🗑️',
-          title: 'Delete Account',
-          message: `Are you sure you want to delete ${acc.name}? Transactions assigned to this account will remain in history.`,
-          danger: true
-        });
-        if (confirmed) {
-          try {
-            await deleteAccountDoc(state.user.uid, acc.id);
-            toast.success(`Account ${acc.name} deleted.`);
-            if (refreshData) refreshData();
-          } catch (err) {
-            toast.error('Unable to delete account.');
-          }
-        }
-      };
-    }
-  });
-}
-
-/**
- * Edit Account Modal
- */
-function openEditAccountModal(acc, onSuccess) {
-  const content = `
-    <form id="edit-account-form" novalidate>
-      <div class="form-group">
-        <label class="form-label" for="edit-acc-name">Account Name</label>
-        <input type="text" id="edit-acc-name" class="form-input" value="${acc.name}" required />
-        <div class="form-error" id="edit-acc-name-error"></div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="edit-acc-type">Account Type</label>
-        <select id="edit-acc-type" class="form-select" required>
-          <option value="Cash" ${acc.type === 'Cash' ? 'selected' : ''}>💵 Cash</option>
-          <option value="Bank" ${acc.type === 'Bank' ? 'selected' : ''}>🏦 Bank Account</option>
-          <option value="UPI" ${acc.type === 'UPI' ? 'selected' : ''}>📱 UPI / Wallet</option>
-          <option value="Other" ${acc.type === 'Other' ? 'selected' : ''}>💳 Other</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="edit-acc-initial">Initial Balance (₹)</label>
-        <div class="form-input-group">
-          <span class="input-prefix">₹</span>
-          <input type="number" id="edit-acc-initial" class="form-input" value="${acc.initialBalance || 0}" step="any" min="0" required />
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="edit-acc-last4">Last 4 Digits (Optional)</label>
-        <input type="text" id="edit-acc-last4" class="form-input" value="${acc.last4Digits || ''}" maxlength="4" />
-      </div>
-
-      <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-update-account">
-        Update Account
-      </button>
-    </form>
-  `;
-
-  openModal({
-    title: '✏️ Edit Account',
-    content,
-    onOpen: (modal) => {
-      modal.querySelector('#edit-account-form').onsubmit = async (e) => {
-        e.preventDefault();
-        const name = modal.querySelector('#edit-acc-name').value;
-        const type = modal.querySelector('#edit-acc-type').value;
-        const initialBalance = modal.querySelector('#edit-acc-initial').value;
-        const last4Digits = modal.querySelector('#edit-acc-last4').value;
-
-        const nameErr = validateName(name);
-        if (nameErr) { modal.querySelector('#edit-acc-name-error').textContent = nameErr; return; }
-
-        const submitBtn = modal.querySelector('#btn-update-account');
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = `<span class="spinner"></span> Updating...`;
-
-        try {
-          await updateAccount(state.user.uid, acc.id, {
-            name,
-            type,
-            initialBalance: Number(initialBalance),
-            last4Digits
-          });
-          closeModal();
-          toast.success('Account updated!');
-          if (onSuccess) onSuccess();
-        } catch (err) {
-          toast.error('Unable to update account.');
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = 'Update Account';
         }
       };
     }
