@@ -31,6 +31,7 @@ import { renderAnalyticsPage, attachAnalyticsListeners } from './pages/analytics
 import { renderBudgetPage, attachBudgetListeners } from './pages/budget.js';
 import { renderProfilePage, attachProfileListeners } from './pages/profile.js';
 import { renderSettingsPage, attachSettingsListeners } from './pages/settings.js';
+import { renderTotalMoneyHistoryPage, attachTotalMoneyHistoryListeners } from './pages/total-money-history.js';
 
 // Components & Skeletons
 import { renderSidebar, renderMobileHeader, renderMobileDrawer, renderBottomNav, attachNavListeners } from './components/navbar.js';
@@ -325,7 +326,7 @@ function renderAppLayout() {
   if (appState.isLocked) return;
 
   const hash = window.location.hash.replace('#/', '').replace('#', '');
-  if (hash && ['dashboard', 'accounts', 'transactions', 'money-control', 'analytics', 'budget', 'profile', 'settings'].includes(hash)) {
+  if (hash && ['dashboard', 'accounts', 'transactions', 'money-control', 'analytics', 'budget', 'profile', 'settings', 'total-money-history'].includes(hash)) {
     appState.activePage = hash;
   } else {
     appState.activePage = 'dashboard';
@@ -367,6 +368,8 @@ function renderCurrentPage(page) {
       return renderProfilePage(appState);
     case 'settings':
       return renderSettingsPage(appState);
+    case 'total-money-history':
+      return renderTotalMoneyHistoryPage(appState);
     default:
       return renderDashboardPage(appState);
   }
@@ -412,6 +415,9 @@ function attachCurrentPageListeners(page) {
       break;
     case 'settings':
       attachSettingsListeners(() => renderAuthView(), refreshFn);
+      break;
+    case 'total-money-history':
+      attachTotalMoneyHistoryListeners(navigateTo);
       break;
     default:
       attachDashboardListeners(navigateTo, refreshFn);

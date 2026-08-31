@@ -452,3 +452,98 @@ export function generateInsights(accounts, transactions) {
 
   return insights.slice(0, 5);
 }
+
+/**
+ * Calculate complete Total Money History across ALL accounts
+ * Starting Total = Sum of all accounts' initial balances
+ * Running total updates with each INCOME (+) and EXPENSE (-).
+ * TRANSFERS do NOT change the overall total money.
+ */
+export function calculateTotalMoneyHistory(accounts = [], transactions = []) {
+  const startingTotal = (accounts || []).reduce((sum, acc) => sum + (Number(acc.initialBalance) || 0), 0);
+
+  // Sort transactions chronologically (ascending: oldest to newest)
+  const sortedAsc = [...(transactions || [])].sort((a, b) => {
+    const dateDiff = (a.date || '').localeCompare(b.date || '');
+    if (dateDiff !== 0) return dateDiff;
+    const timeA = a.time || a.createdAt || '';
+    const timeB = b.time || b.createdAt || '';
+    return timeA.localeCompare(timeB);
+  });
+
+  let runningTotal = startingTotal;
+
+  const historyAsc = sortedAsc.map(tx => {
+    const amount = Number(tx.amount) || 0;
+    const previousTotal = runningTotal;
+    let type = tx.type;
+    let netChange = 0;
+    let typeLabel = '';
+    let amountSign = '';
+    let amountColor = '';
+
+    if (type === 'INCOME') {
+      runningTotal += amount;
+      netChange = amount;
+      typeLabel = 'Money Added';
+      amountSign = '+';
+      amountColor = 'var(--income)';
+    } else if (type === 'EXPENSE') {
+      runningTotal -= amount;
+      netChange = -amount;
+      typeLabel = 'Expense';
+      amountSign = '−';
+      amountColor = 'var(--expense)';
+    } else if (type === 'TRANSFER') {
+      // Internal transfer does NOT change total money
+      netChange = 0;
+      typeLabel = 'Transfer';
+      amountSign = '';
+      amountColor = 'var(--primary-light)';
+    }
+
+    const newTotal = runningTotal;
+
+    // Get account names for display
+    const srcAcc = accounts.find(a => a.id === tx.sourceAccountId);
+    const destAcc = accounts.find(a => a.id === tx.destinationAccountId);
+
+    let accountName = '';
+    if (type === 'INCOME') {
+      accountName = destAcc ? destAcc.name : 'Account';
+    } else if (type === 'EXPENSE') {
+      accountName = srcAcc ? srcAcc.name : 'Account';
+    } else if (type === 'TRANSFER') {
+      const srcName = srcAcc ? srcAcc.name : 'Account';
+      const destName = destAcc ? destAcc.name : 'Account';
+      accountName = `${srcName} → ${destName}`;
+    }
+
+    return {
+      ...tx,
+      previousTotal,
+      newTotal,
+      netChange,
+      typeLabel,
+      amountSign,
+      amountColor,
+      accountName,
+      sourceAccountName: srcAcc ? srcAcc.name : '',
+      destinationAccountName: destAcc ? destAcc.name : ''
+    };
+  });
+
+  // Latest / Current Total is the final running total after all transactions
+  const currentTotal = runningTotal;
+
+  // History shown newest first (descending)
+  const historyDesc = [...historyAsc].reverse();
+
+  return {
+    startingTotal,
+    currentTotal,
+    count: sortedAsc.length,
+    history: historyDesc
+  };
+}
+

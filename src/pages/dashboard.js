@@ -92,11 +92,12 @@ export function renderDashboardPage(state) {
       ` : ''}
 
       <!-- 2. Total Money card -->
-      <div class="balance-card">
+      <div class="balance-card balance-card-interactive" id="dashboard-total-money-card" tabindex="0" role="button" aria-label="View Total Money History">
         <div class="balance-label">💰 TOTAL MONEY</div>
         <div class="balance-amount">${formatCurrency(totalMoney)}</div>
         <div class="balance-subtitle">Across ${accounts.length} account${accounts.length === 1 ? '' : 's'}</div>
       </div>
+
 
       <!-- 3. Accounts section -->
       <div class="section accounts-section">
@@ -194,6 +195,19 @@ export function attachDashboardListeners(navigateFn, refreshData) {
       retryBtn.disabled = true;
       retryBtn.innerHTML = `<span class="spinner"></span> Loading...`;
       if (refreshData) refreshData();
+    };
+  }
+
+  // Click/Tap on Total Money card to open Total Money History page
+  const totalMoneyCard = document.getElementById('dashboard-total-money-card');
+  if (totalMoneyCard) {
+    const goToHistory = () => navigateFn('total-money-history');
+    totalMoneyCard.onclick = goToHistory;
+    totalMoneyCard.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        goToHistory();
+      }
     };
   }
 

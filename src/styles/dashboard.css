@@ -745,3 +745,375 @@
   box-shadow: var(--shadow-sm);
   font-weight: var(--fw-semibold);
 }
+
+/* ---------- Total Money Card Interactive State ---------- */
+.balance-card-interactive {
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(255, 255, 255, 0.2);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.balance-card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 36px rgba(124, 58, 237, 0.45);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.balance-card-interactive:active {
+  transform: scale(0.985);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.3);
+}
+
+.balance-card-interactive:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
+/* ---------- Total Money History Page ---------- */
+.total-money-history-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.tmh-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: var(--space-2);
+}
+
+.tmh-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--primary);
+  padding: 8px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--primary-bg);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tmh-back-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.tmh-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.tmh-hero-card {
+  margin-bottom: var(--space-2);
+}
+
+/* Timeline */
+.tmh-timeline-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.tmh-timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.tmh-timeline-step {
+  display: flex;
+  flex-direction: column;
+}
+
+.tmh-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.tmh-connector-line {
+  width: 2px;
+  height: 12px;
+  background: var(--border-color);
+}
+
+.tmh-connector-arrow {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  background: var(--bg-card);
+  padding: 2px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+/* History Item Card */
+.tmh-item-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(108, 99, 255, 0.1);
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.tmh-item-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+}
+
+.tmh-item-card:active {
+  transform: scale(0.99);
+}
+
+.tmh-item-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.tmh-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.tmh-item-date {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.tmh-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tmh-badge-income {
+  background: var(--income-bg);
+  color: var(--income);
+}
+
+.tmh-badge-expense {
+  background: var(--expense-bg);
+  color: var(--expense);
+}
+
+.tmh-badge-transfer {
+  background: rgba(139, 131, 255, 0.12);
+  color: var(--primary);
+}
+
+.tmh-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tmh-item-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.tmh-total-label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.tmh-total-amount {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.tmh-item-change {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+}
+
+.tmh-change-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tmh-change-amount {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.tmh-item-account {
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.tmh-item-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-light);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tmh-tap-hint {
+  font-size: 0.75rem;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Starting Total Card */
+.tmh-starting-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--bg-card);
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-xl);
+  margin-top: 4px;
+}
+
+.tmh-starting-icon {
+  font-size: 1.6rem;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+  background: rgba(108, 99, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tmh-starting-info {
+  flex: 1;
+}
+
+.tmh-starting-label {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.tmh-starting-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.tmh-starting-amount {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+/* Empty State */
+.tmh-empty-state {
+  text-align: center;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tmh-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+}
+
+.tmh-empty-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.tmh-empty-desc {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 400px;
+}
+
+/* Detail Modal */
+.tmh-detail-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.tmh-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.tmh-detail-row.highlight {
+  background: rgba(108, 99, 255, 0.08);
+  border: 1px solid rgba(108, 99, 255, 0.2);
+}
+
+.tmh-detail-row.new-total-row {
+  background: var(--gradient-primary);
+  color: white;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+}
+
+.tmh-detail-row.new-total-row .tmh-detail-label,
+.tmh-detail-row.new-total-row .tmh-detail-value {
+  color: white;
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.tmh-detail-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.tmh-detail-value {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.tmh-detail-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
