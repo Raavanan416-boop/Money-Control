@@ -3630,7 +3630,7 @@ This typically indicates that your device does not have a healthy Internet conne
 
       <!-- 2. Total Money card -->
       <div class="balance-card balance-card-interactive" id="dashboard-total-money-card" tabindex="0" role="button" aria-label="View Total Money History">
-        <div class="balance-label">💰 TOTAL MONEY</div>
+        <div class="balance-label">💰 TOTAL KAVI MONEY</div>
         <div class="balance-amount">${H(o)}</div>
         <div class="balance-subtitle">Across ${e.length} account${e.length===1?"":"s"}</div>
       </div>
