@@ -113,7 +113,7 @@ function renderAuthForm() {
       <form class="auth-form" id="forgot-form" novalidate>
         <div class="form-group">
           <label class="form-label" for="forgot-email">Email Address</label>
-          <input type="email" id="forgot-email" class="form-input" placeholder="name@example.com" autocomplete="email" required />
+          <input type="email" id="forgot-email" class="form-input" placeholder="Usergmail.com" autocomplete="email" required />
           <div class="form-error" id="forgot-email-error"></div>
         </div>
 
