@@ -62,10 +62,23 @@ export function renderDashboardPage(state) {
   const userName = profile?.name ? profile.name.split(' ')[0] : 'User';
   const { balances, totalMoney } = calculateTotals(accounts, transactions);
 
-  // Today's activity
+  // Today's activity & Recent activity (Last 24 hours only)
   const today = getTodayDate();
   const todayTotals = calculateDailyTotals(transactions, today);
-  const recentTx = transactions.slice(0, 5);
+  const now = Date.now();
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+  const recentTx = transactions.filter(tx => {
+    let txTime = 0;
+    if (tx.createdAt) {
+      txTime = new Date(tx.createdAt).getTime();
+    } else if (tx.date) {
+      txTime = new Date(tx.date + 'T23:59:59').getTime();
+    }
+    const age = now - txTime;
+    return age >= 0 && age <= TWENTY_FOUR_HOURS_MS;
+  }).slice(0, 5);
+
   const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   const budgetAlerts = generateBudgetAlerts(dashboardState.budgets, transactions, currentMonth);
 
@@ -176,7 +189,7 @@ export function renderDashboardPage(state) {
         <div class="card card-flat recent-tx-card">
           ${recentTx.length > 0
             ? renderTransactionList(recentTx, { showActions: false, showDate: true, accounts: dashboardState.accounts })
-            : renderEmptyTransactions()
+            : renderEmptyTransactions('No recent activity', 'Only activity within the last 24 hours appears on the dashboard. View all transactions in Txns.')
           }
         </div>
       </div>

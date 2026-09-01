@@ -5,12 +5,12 @@
 /**
  * Render empty state for no transactions
  */
-export function renderEmptyTransactions() {
+export function renderEmptyTransactions(title = 'No transactions yet', text = 'Start tracking your money by adding your first transaction.') {
   return `
     <div class="empty-state">
       <span class="empty-state-icon">💰</span>
-      <h3 class="empty-state-title">No transactions yet</h3>
-      <p class="empty-state-text">Start tracking your money by adding your first transaction.</p>
+      <h3 class="empty-state-title">${title}</h3>
+      <p class="empty-state-text">${text}</p>
       <button class="btn btn-primary" id="empty-add-money-btn">+ Add Money</button>
     </div>
   `;

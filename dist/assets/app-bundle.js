@@ -3543,11 +3543,11 @@ This typically indicates that your device does not have a healthy Internet conne
         </div>
       </div>
     </div>
-  `}function hr(n,t={}){return!n||n.length===0?"":n.map(e=>xP(e,t)).join("")}function fb(){return`
+  `}function hr(n,t={}){return!n||n.length===0?"":n.map(e=>xP(e,t)).join("")}function fb(n="No transactions yet",t="Start tracking your money by adding your first transaction."){return`
     <div class="empty-state">
       <span class="empty-state-icon">💰</span>
-      <h3 class="empty-state-title">No transactions yet</h3>
-      <p class="empty-state-text">Start tracking your money by adding your first transaction.</p>
+      <h3 class="empty-state-title">${n}</h3>
+      <p class="empty-state-text">${t}</p>
       <button class="btn btn-primary" id="empty-add-money-btn">+ Add Money</button>
     </div>
   `}function SP(){return`
@@ -3606,7 +3606,7 @@ This typically indicates that your device does not have a healthy Internet conne
           </button>
         </div>
       </div>
-    `;const s=t!=null&&t.name?t.name.split(" ")[0]:"User",{balances:r,totalMoney:o}=SS(e,i),a=Ss(),c=Bv(i,a),l=i.slice(0,5),d=`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}`,h=qS(St.budgets,i,d);return`
+    `;const s=t!=null&&t.name?t.name.split(" ")[0]:"User",{balances:r,totalMoney:o}=SS(e,i),a=Ss(),c=Bv(i,a),l=Date.now(),d=1440*60*1e3,h=i.filter(y=>{let b=0;y.createdAt?b=new Date(y.createdAt).getTime():y.date&&(b=new Date(y.date+"T23:59:59").getTime());const v=l-b;return v>=0&&v<=d}).slice(0,5),f=`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}`,g=qS(St.budgets,i,f);return`
     <div class="page animate-fade-in dashboard-page">
       <!-- 1. Greeting + current date -->
       <div class="greeting">
@@ -3615,13 +3615,13 @@ This typically indicates that your device does not have a healthy Internet conne
       </div>
 
       <!-- Budget Alert Banner if any -->
-      ${h.length>0?`
+      ${g.length>0?`
         <div style="margin-bottom: var(--space-4);">
-          ${h.map(f=>`
-            <div class="alert-banner alert-banner-${f.type}">
-              <span class="alert-banner-icon">${f.icon}</span>
+          ${g.map(y=>`
+            <div class="alert-banner alert-banner-${y.type}">
+              <span class="alert-banner-icon">${y.icon}</span>
               <div class="alert-banner-text">
-                <strong>${f.title}:</strong> ${f.message}
+                <strong>${y.title}:</strong> ${y.message}
               </div>
             </div>
           `).join("")}
@@ -3643,13 +3643,13 @@ This typically indicates that your device does not have a healthy Internet conne
           <span class="section-link" id="link-manage-accounts">View All →</span>
         </div>
         <div class="account-rows-container card card-flat">
-          ${e.length>0?e.map(f=>{const g=r[f.id]||0;return`
-              <div class="account-compact-row" data-account-id="${f.id}" style="cursor: pointer;">
+          ${e.length>0?e.map(y=>{const b=r[y.id]||0;return`
+              <div class="account-compact-row" data-account-id="${y.id}" style="cursor: pointer;">
                 <div class="account-row-left">
-                  <span class="account-row-icon">${f.icon||"🏦"}</span>
-                  <span class="account-row-name">${f.name}</span>
+                  <span class="account-row-icon">${y.icon||"🏦"}</span>
+                  <span class="account-row-name">${y.name}</span>
                 </div>
-                <div class="account-row-balance">${H(g)}</div>
+                <div class="account-row-balance">${H(b)}</div>
               </div>
             `}).join(""):`
             <div class="account-compact-empty">
@@ -3708,7 +3708,7 @@ This typically indicates that your device does not have a healthy Internet conne
         </div>
 
         <div class="card card-flat recent-tx-card">
-          ${l.length>0?hr(l,{showActions:!1,showDate:!0,accounts:St.accounts}):fb()}
+          ${h.length>0?hr(h,{showActions:!1,showDate:!0,accounts:St.accounts}):fb("No recent activity","Only activity within the last 24 hours appears on the dashboard. View all transactions in Txns.")}
         </div>
       </div>
     </div>
