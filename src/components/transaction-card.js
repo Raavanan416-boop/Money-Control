@@ -86,12 +86,6 @@ function renderTimelineRow(tx, accounts, isLast) {
       </div>
       <div class="tl-right">
         <div class="tl-amount tl-amount--${typeKey}">${amountStr}</div>
-        <div class="tl-actions">
-          <button class="transaction-action-btn tl-action-btn edit"
-                  data-action="edit" data-tx-id="${tx.id}" title="Edit">✏️</button>
-          <button class="transaction-action-btn tl-action-btn delete"
-                  data-action="delete" data-tx-id="${tx.id}" title="Delete">🗑️</button>
-        </div>
       </div>
     </div>
   `;
@@ -99,11 +93,29 @@ function renderTimelineRow(tx, accounts, isLast) {
 
 // ─── date group header ────────────────────────────────────────────────────────
 
-function renderGroupHeader(dateStr) {
+function renderGroupHeader(dateStr, txList = []) {
+  let totalAdded = 0;
+  let totalExpense = 0;
+
+  txList.forEach(tx => {
+    if (tx.type === 'INCOME') {
+      totalAdded += Number(tx.amount) || 0;
+    } else if (tx.type === 'EXPENSE') {
+      totalExpense += Number(tx.amount) || 0;
+    }
+  });
+
   const label = formatGroupLabel(dateStr);
+  const addedStr = `+${formatCurrency(totalAdded)}`;
+  const expenseStr = `-${formatCurrency(totalExpense)}`;
+
   return `
     <div class="tl-group-header">
       <span class="tl-group-label">${label}</span>
+      <div class="tl-group-totals" style="display: flex; align-items: center; gap: 12px; font-weight: var(--fw-bold, 700); font-size: var(--fs-sm, 0.875rem);">
+        <span class="tl-group-added" style="color: var(--income, #10b981);">${addedStr}</span>
+        <span class="tl-group-expense" style="color: var(--expense, #ef4444);">${expenseStr}</span>
+      </div>
     </div>
   `;
 }
@@ -127,7 +139,7 @@ export function renderTransactionList(transactions, options = {}) {
   let html = '<div class="tl-container">';
   order.forEach(dateKey => {
     const group = grouped[dateKey];
-    html += renderGroupHeader(dateKey);
+    html += renderGroupHeader(dateKey, group);
     html += '<div class="tl-group">';
     group.forEach((tx, idx) => {
       html += renderTimelineRow(tx, accounts, idx === group.length - 1);

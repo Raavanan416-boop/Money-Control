@@ -301,6 +301,7 @@ export async function updateTransaction(uid, txId, data) {
     updatedAt: new Date().toISOString()
   };
 
+  if (data.type !== undefined) txData.type = data.type;
   if (data.sourceAccountId !== undefined) txData.sourceAccountId = data.sourceAccountId;
   if (data.destinationAccountId !== undefined) txData.destinationAccountId = data.destinationAccountId;
 

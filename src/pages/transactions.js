@@ -4,6 +4,10 @@
 
 import {
   formatCurrency,
+  formatDate,
+  formatTime,
+  escapeHtml,
+  getCategoryEmoji,
   getTodayDate,
   getWeekRange,
   EXPENSE_CATEGORIES,
@@ -11,7 +15,8 @@ import {
 } from '../utils/formatters.js';
 import { renderTransactionItem, renderTransactionList } from '../components/transaction-card.js';
 import { renderEmptyTransactions, renderEmptySearch } from '../components/empty-state.js';
-import { openAddTransactionModal, openTransferModal, openEditTransactionModal, openEditTransferModal, handleDeleteTransaction } from './dashboard.js';
+import { openModal, closeModal } from '../components/modal.js';
+import { updateTransaction } from '../services/firestore.js';
 import { toast } from '../utils/toast.js';
 
 let state = {
@@ -266,23 +271,220 @@ export function attachTransactionsListeners(refreshData) {
 }
 
 function attachItemListeners(refreshData) {
-  document.querySelectorAll('#tx-list-container .transaction-action-btn[data-action]').forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const action = btn.dataset.action;
-      const txId = btn.dataset.txId;
+  const container = document.getElementById('tx-list-container');
+  if (!container) return;
+
+  container.querySelectorAll('.tl-row, .transaction-item').forEach(row => {
+    row.onclick = () => {
+      const txId = row.dataset.txId;
       const tx = state.transactions.find(t => t.id === txId);
       if (!tx) return;
-
-      if (action === 'edit') {
-        if (tx.type === 'TRANSFER') {
-          openEditTransferModal(tx, refreshData);
-        } else {
-          openEditTransactionModal(tx, refreshData);
-        }
-      } else if (action === 'delete') {
-        handleDeleteTransaction(tx, refreshData);
-      }
+      openTransactionDetailsModal(tx, refreshData);
     };
+  });
+}
+
+export function openTransactionDetailsModal(tx, onSaveSuccess) {
+  const currentType = tx.type || 'EXPENSE';
+  const accounts = state.accounts || [];
+
+  const typeLabel = currentType === 'INCOME' ? 'Income' : currentType === 'EXPENSE' ? 'Expense' : 'Transfer';
+
+  const getAccountOptions = (selectedId) => {
+    return accounts.map(a => `
+      <option value="${a.id}" ${selectedId === a.id ? 'selected' : ''}>
+        ${a.icon || '🏦'} ${escapeHtml(a.name)}
+      </option>
+    `).join('');
+  };
+
+  const renderCategoryOptions = (type, selectedCat) => {
+    if (type === 'TRANSFER') {
+      return `<option value="Transfer" selected>Transfer</option>`;
+    }
+    const list = type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+    return list.map(c => `
+      <option value="${c.value}" ${selectedCat === c.value ? 'selected' : ''}>
+        ${escapeHtml(c.label)}
+      </option>
+    `).join('');
+  };
+
+  const renderAccountFields = (type) => {
+    if (type === 'INCOME') {
+      return `
+        <div class="form-group">
+          <label class="form-label" for="details-tx-account">Account</label>
+          <select id="details-tx-account" class="form-select" required>
+            ${getAccountOptions(tx.destinationAccountId || (accounts[0] && accounts[0].id))}
+          </select>
+        </div>
+      `;
+    } else if (type === 'EXPENSE') {
+      return `
+        <div class="form-group">
+          <label class="form-label" for="details-tx-account">Account</label>
+          <select id="details-tx-account" class="form-select" required>
+            ${getAccountOptions(tx.sourceAccountId || (accounts[0] && accounts[0].id))}
+          </select>
+        </div>
+      `;
+    } else {
+      return `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label" for="details-tx-from-account">From Account</label>
+            <select id="details-tx-from-account" class="form-select" required>
+              ${getAccountOptions(tx.sourceAccountId || (accounts[0] && accounts[0].id))}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="details-tx-to-account">To Account</label>
+            <select id="details-tx-to-account" class="form-select" required>
+              ${getAccountOptions(tx.destinationAccountId || (accounts[1] ? accounts[1].id : accounts[0]?.id))}
+            </select>
+          </div>
+        </div>
+      `;
+    }
+  };
+
+  const emoji = tx.type === 'TRANSFER' ? '↔' : (tx.type === 'INCOME' ? '💰' : getCategoryEmoji(tx.category));
+  const timeStr = tx.createdAt ? formatTime(tx.createdAt) : '12:00 PM';
+  const dateStr = formatDate(tx.date);
+
+  const content = `
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+      <div style="width: 44px; height: 44px; border-radius: var(--radius-lg); background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 22px;">
+        ${emoji}
+      </div>
+      <div>
+        <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;">Transaction</div>
+        <div style="font-size: 1.125rem; font-weight: 800; color: var(--text-primary);">${escapeHtml(tx.reason || tx.category || 'Transaction')}</div>
+      </div>
+    </div>
+
+    <form id="details-tx-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="details-tx-reason">Reason</label>
+        <input type="text" id="details-tx-reason" class="form-input" value="${escapeHtml(tx.reason || '')}" placeholder="Reason" required />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <div class="form-input" style="background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; opacity: 0.9; cursor: not-allowed; display: flex; align-items: center; justify-content: space-between;">
+          <span>${typeLabel}</span>
+          <span style="font-size: 0.75rem; color: var(--text-tertiary); font-weight: 500;">🔒</span>
+        </div>
+      </div>
+
+      <div id="details-account-container">
+        ${renderAccountFields(currentType)}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="details-tx-category">Category</label>
+        <select id="details-tx-category" class="form-select">
+          ${renderCategoryOptions(currentType, tx.category)}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Amount</label>
+        <div class="form-input" style="background: var(--bg-tertiary); color: var(--text-primary); font-weight: 700; opacity: 0.9; cursor: not-allowed; display: flex; align-items: center; justify-content: space-between;">
+          <span>${formatCurrency(tx.amount)}</span>
+          <span style="font-size: 0.75rem; color: var(--text-tertiary); font-weight: 500;">🔒 Read-only</span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <div class="form-input" style="background: var(--bg-tertiary); color: var(--text-primary); opacity: 0.9; cursor: not-allowed; display: flex; align-items: center; justify-content: space-between;">
+            <span>📅 ${dateStr}</span>
+            <span style="font-size: 0.75rem; color: var(--text-tertiary); font-weight: 500;">🔒</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Time</label>
+          <div class="form-input" style="background: var(--bg-tertiary); color: var(--text-primary); opacity: 0.9; cursor: not-allowed; display: flex; align-items: center; justify-content: space-between;">
+            <span>⏰ ${timeStr}</span>
+            <span style="font-size: 0.75rem; color: var(--text-tertiary); font-weight: 500;">🔒</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; margin-top: 24px;">
+        <button type="button" class="btn btn-outline" id="details-tx-cancel" style="flex: 1;">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="details-tx-save" style="flex: 1;">Save Changes</button>
+      </div>
+    </form>
+  `;
+
+  openModal({
+    title: 'Transaction Details',
+    content,
+    onOpen: (modal) => {
+      const categorySelect = modal.querySelector('#details-tx-category');
+      const cancelBtn = modal.querySelector('#details-tx-cancel');
+      const form = modal.querySelector('#details-tx-form');
+
+      cancelBtn.onclick = () => closeModal();
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const newReason = modal.querySelector('#details-tx-reason').value.trim();
+        const newCategory = categorySelect ? categorySelect.value : tx.category;
+
+        if (!newReason) {
+          toast.error('Please enter a transaction reason.');
+          return;
+        }
+
+        const submitBtn = modal.querySelector('#details-tx-save');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span class="spinner"></span> Saving...`;
+
+        try {
+          const uid = state.user?.uid;
+          const payload = {
+            amount: tx.amount,
+            date: tx.date,
+            reason: newReason,
+            type: currentType,
+            category: newCategory,
+            notes: tx.notes || ''
+          };
+
+          if (currentType === 'INCOME') {
+            const accSelect = modal.querySelector('#details-tx-account');
+            payload.destinationAccountId = accSelect ? accSelect.value : tx.destinationAccountId;
+          } else if (currentType === 'EXPENSE') {
+            const accSelect = modal.querySelector('#details-tx-account');
+            payload.sourceAccountId = accSelect ? accSelect.value : tx.sourceAccountId;
+          } else if (currentType === 'TRANSFER') {
+            const fromSelect = modal.querySelector('#details-tx-from-account');
+            const toSelect = modal.querySelector('#details-tx-to-account');
+            payload.sourceAccountId = fromSelect ? fromSelect.value : tx.sourceAccountId;
+            payload.destinationAccountId = toSelect ? toSelect.value : tx.destinationAccountId;
+          }
+
+          await updateTransaction(uid, tx.id, payload);
+
+          // Update local state object
+          Object.assign(tx, payload);
+
+          closeModal();
+          toast.success('✅ Transaction updated successfully!');
+          if (onSaveSuccess) onSaveSuccess();
+        } catch (err) {
+          console.error(err);
+          toast.error('Unable to save transaction details.');
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = 'Save Changes';
+        }
+      };
+    }
   });
 }
