@@ -472,7 +472,253 @@
   color: var(--expense);
 }
 
-/* ---------- Insights Card ---------- */
+/* ============================================
+   Timeline List — Txns / All Activity Page
+   ============================================ */
+
+/* Outer wrapper */
+.tl-container {
+  padding: var(--space-4) 0;
+}
+
+/* ── Date group header ────────────────────────── */
+.tl-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5) var(--space-2);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-light);
+  margin-top: var(--space-2);
+}
+
+.tl-group-header:first-child {
+  margin-top: 0;
+}
+
+.tl-group-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.tl-group-total {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.tl-total--pos     { color: var(--income); }
+.tl-total--neg     { color: var(--expense); }
+.tl-total--neutral { color: var(--text-tertiary); }
+
+/* ── Group body ────────────────────────────────── */
+.tl-group {
+  padding: var(--space-1) 0 var(--space-3);
+}
+
+/* ── Individual row ────────────────────────────── */
+.tl-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-5);
+  position: relative;
+  transition: background var(--transition-fast);
+  cursor: default;
+  border-radius: var(--radius-lg);
+  margin: 0 var(--space-2);
+}
+
+.tl-row:hover {
+  background: var(--bg-card-hover);
+}
+
+/* ── Spine (dot + connecting line) ─────────────── */
+.tl-spine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 12px;
+  padding-top: 14px; /* align dot with first line of title */
+}
+
+.tl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.tl-dot--income   { border-color: var(--income); }
+.tl-dot--expense  { border-color: var(--expense); }
+.tl-dot--transfer { border-color: var(--primary); }
+
+.tl-line {
+  width: 1.5px;
+  flex: 1;
+  min-height: 24px;
+  background: var(--border-color);
+  margin-top: 4px;
+}
+
+/* ── Icon bubble ────────────────────────────────── */
+.tl-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.tl-icon--income   { background: var(--income-bg);  color: var(--income); }
+.tl-icon--expense  { background: var(--expense-bg); color: var(--expense); }
+.tl-icon--transfer { background: var(--primary-bg); color: var(--primary); }
+
+/* ── Details (middle column) ────────────────────── */
+.tl-details {
+  flex: 1;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.tl-title {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--lh-tight);
+}
+
+.tl-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: nowrap;
+}
+
+.tl-notes-badge {
+  display: inline-block;
+  font-size: var(--fs-xs);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ── Right column (amount + actions) ────────────── */
+.tl-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.tl-amount {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tl-amount--income   { color: var(--income); }
+.tl-amount--expense  { color: var(--expense); }
+.tl-amount--transfer { color: var(--primary); }
+
+/* ── Action buttons (edit/delete) ───────────────── */
+.tl-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.tl-row:hover .tl-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tl-action-btn {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 13px !important;
+  border-radius: var(--radius-md) !important;
+}
+
+/* ── Mobile responsiveness ──────────────────────── */
+@media (max-width: 480px) {
+  .tl-row {
+    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-3);
+    margin: 0 var(--space-1);
+    gap: var(--space-2);
+  }
+
+  .tl-spine {
+    padding-top: 12px;
+    width: 10px;
+  }
+
+  .tl-icon {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+  }
+
+  .tl-title {
+    font-size: var(--fs-sm);
+  }
+
+  .tl-amount {
+    font-size: var(--fs-sm);
+  }
+
+  .tl-right {
+    min-width: 72px;
+  }
+
+  .tl-group-header {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .tl-actions {
+    opacity: 1;
+    transform: none;
+  }
+
+  .tl-notes-badge {
+    display: none; /* hide on very small screens to save space */
+  }
+}
+
+
 .insights-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);

@@ -104,7 +104,7 @@ export function renderTransactionsPage(appState) {
       </div>
 
       <!-- Activity List -->
-      <div class="card card-flat" style="padding: 0;" id="tx-list-container">
+      <div class="card card-flat" style="padding: 0; overflow: hidden; border-radius: var(--radius-xl);" id="tx-list-container">
         ${renderTransactionListContent(filtered)}
       </div>
     </div>
@@ -118,7 +118,7 @@ function renderTransactionListContent(filtered) {
   if (filtered.length === 0) {
     return renderEmptySearch();
   }
-  return renderTransactionList(filtered, { showActions: false, showDate: true, showNotes: true, accounts: state.accounts });
+  return renderTransactionList(filtered, { accounts: state.accounts });
 }
 
 function getFilteredTransactions() {
