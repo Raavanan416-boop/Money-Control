@@ -44,16 +44,9 @@ export function renderTransactionsPage(appState) {
 
   return `
     <div class="page animate-fade-in">
-      <div class="page-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-        <div>
-          <h1 class="page-title">All Activity 📜</h1>
-          <p class="page-subtitle">Search, filter, edit, or delete transactions and account transfers.</p>
-        </div>
-        <div style="display: flex; gap: 8px;">
-          <button class="btn btn-income btn-sm" id="btn-tx-add-income">+ Add Money</button>
-          <button class="btn btn-expense btn-sm" id="btn-tx-add-expense">− Add Expense</button>
-          <button class="btn btn-outline btn-sm" id="btn-tx-transfer">↔ Transfer</button>
-        </div>
+      <div class="page-header">
+        <h1 class="page-title">All Activity 📜</h1>
+        <p class="page-subtitle">Search, filter, edit, or delete transactions and account transfers.</p>
       </div>
 
       <!-- Search & Filters Bar -->
@@ -267,15 +260,7 @@ export function attachTransactionsListeners(refreshData) {
     };
   }
 
-  // Quick Action Buttons
-  const addIncomeBtn = document.getElementById('btn-tx-add-income');
-  if (addIncomeBtn) addIncomeBtn.onclick = () => openAddTransactionModal('INCOME', refreshData);
 
-  const addExpenseBtn = document.getElementById('btn-tx-add-expense');
-  if (addExpenseBtn) addExpenseBtn.onclick = () => openAddTransactionModal('EXPENSE', refreshData);
-
-  const transferBtn = document.getElementById('btn-tx-transfer');
-  if (transferBtn) transferBtn.onclick = () => openTransferModal(refreshData);
 
   attachItemListeners(refreshData);
 }
