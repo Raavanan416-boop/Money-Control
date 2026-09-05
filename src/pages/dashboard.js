@@ -348,8 +348,8 @@ export function openAddTransactionModal(type = 'INCOME', onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="tx-reason">Reason</label>
-        <input type="text" id="tx-reason" class="form-input" placeholder="${isIncome ? 'e.g. Monthly Salary' : 'e.g. Lunch with friends'}" required />
+        <label class="form-label" for="tx-reason">Reason (Optional)</label>
+        <input type="text" id="tx-reason" class="form-input" placeholder="${isIncome ? 'e.g. Monthly Salary' : 'e.g. Lunch with friends'}" />
         <div class="form-error" id="tx-reason-error"></div>
       </div>
 
@@ -566,8 +566,8 @@ export function openTransferModal(onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="tr-reason">Reason / Description</label>
-        <input type="text" id="tr-reason" class="form-input" placeholder="e.g. ATM Withdrawal, Moving to Savings" required />
+        <label class="form-label" for="tr-reason">Reason / Description (Optional)</label>
+        <input type="text" id="tr-reason" class="form-input" placeholder="e.g. ATM Withdrawal, Moving to Savings" />
         <div class="form-error" id="tr-reason-error"></div>
       </div>
 
@@ -653,8 +653,7 @@ export function openTransferModal(onSaveSuccess) {
           modal.querySelector('#tr-to-error').textContent = 'From and To accounts cannot be the same!';
           isValid = false;
         }
-        const reasonErr = validateRequired(reason, 'a reason');
-        if (reasonErr) { modal.querySelector('#tr-reason-error').textContent = reasonErr; isValid = false; }
+        // Reason is optional
 
         if (!isValid) return;
 
@@ -742,8 +741,8 @@ export function openEditTransactionModal(tx, onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="edit-tx-reason">Reason</label>
-        <input type="text" id="edit-tx-reason" class="form-input" value="${tx.reason || ''}" required />
+        <label class="form-label" for="edit-tx-reason">Reason (Optional)</label>
+        <input type="text" id="edit-tx-reason" class="form-input" value="${tx.reason || ''}" />
       </div>
 
       <div class="form-group">
@@ -852,8 +851,8 @@ export function openEditTransferModal(tx, onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="edit-tr-reason">Reason</label>
-        <input type="text" id="edit-tr-reason" class="form-input" value="${tx.reason || ''}" required />
+        <label class="form-label" for="edit-tr-reason">Reason (Optional)</label>
+        <input type="text" id="edit-tr-reason" class="form-input" value="${tx.reason || ''}" />
       </div>
 
       <div class="form-group">

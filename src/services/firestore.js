@@ -145,15 +145,21 @@ function getAccountTypeDefaultIcon(type) {
 export async function updateAccount(uid, accountId, data) {
   if (!uid || !accountId) return;
   const accRef = doc(firestoreDb(), 'users', uid, 'accounts', accountId);
-  await updateDoc(accRef, {
+  const updateData = {
     name: data.name.trim(),
     type: data.type,
-    initialBalance: Number(data.initialBalance) || 0,
     bankName: (data.bankName || '').trim(),
     last4Digits: (data.last4Digits || '').trim(),
     icon: data.icon || getAccountTypeDefaultIcon(data.type),
     updatedAt: new Date().toISOString()
-  });
+  };
+  if (data.notes !== undefined) {
+    updateData.notes = (data.notes || '').trim();
+  }
+  if (data.initialBalance !== undefined) {
+    updateData.initialBalance = Number(data.initialBalance) || 0;
+  }
+  await updateDoc(accRef, updateData);
 }
 
 /**
@@ -243,7 +249,7 @@ export async function addTransaction(uid, data) {
     type: data.type, // 'INCOME' | 'EXPENSE' | 'TRANSFER'
     amount: amount,
     date: data.date,
-    reason: data.reason.trim(),
+    reason: (data.reason || '').trim(),
     category: data.category || (data.type === 'TRANSFER' ? 'Transfer' : 'Other'),
     notes: (data.notes || '').trim(),
     createdAt: new Date().toISOString()
@@ -295,7 +301,7 @@ export async function updateTransaction(uid, txId, data) {
   const txData = {
     amount: Number(data.amount),
     date: data.date,
-    reason: data.reason.trim(),
+    reason: (data.reason || '').trim(),
     category: data.category || (data.type === 'TRANSFER' ? 'Transfer' : 'Other'),
     notes: (data.notes || '').trim(),
     updatedAt: new Date().toISOString()

@@ -366,8 +366,8 @@ export function openTransactionDetailsModal(tx, onSaveSuccess) {
 
     <form id="details-tx-form" novalidate>
       <div class="form-group">
-        <label class="form-label" for="details-tx-reason">Reason</label>
-        <input type="text" id="details-tx-reason" class="form-input" value="${escapeHtml(tx.reason || '')}" placeholder="Reason" required />
+        <label class="form-label" for="details-tx-reason">Reason (Optional)</label>
+        <input type="text" id="details-tx-reason" class="form-input" value="${escapeHtml(tx.reason || '')}" placeholder="Reason (Optional)" />
       </div>
 
       <div class="form-group">
@@ -437,10 +437,7 @@ export function openTransactionDetailsModal(tx, onSaveSuccess) {
         const newReason = modal.querySelector('#details-tx-reason').value.trim();
         const newCategory = categorySelect ? categorySelect.value : tx.category;
 
-        if (!newReason) {
-          toast.error('Please enter a transaction reason.');
-          return;
-        }
+        // Reason is optional
 
         const submitBtn = modal.querySelector('#details-tx-save');
         submitBtn.disabled = true;

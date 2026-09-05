@@ -89,11 +89,19 @@ function renderAccountDetailsScreen(account, transactions) {
 
   return `
     <div class="page animate-fade-in account-details-page">
-      <!-- Back button -->
-      <div style="margin-bottom: var(--space-4);">
+      <!-- Back button & Action buttons -->
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: var(--space-4);">
         <button class="btn btn-ghost btn-sm" id="btn-back-to-accounts" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text-secondary); cursor: pointer; border: none; background: transparent; padding: 6px 0; font-size: 0.9375rem;">
           ← Back
         </button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn btn-outline btn-sm" id="btn-edit-account" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+            ✏️ Edit Account
+          </button>
+          <button class="btn btn-danger btn-sm" id="btn-delete-account" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+            🗑️ Delete Account
+          </button>
+        </div>
       </div>
 
       <!-- Account Header & Current Balance -->
@@ -103,6 +111,7 @@ function renderAccountDetailsScreen(account, transactions) {
           ${account.name}
         </h1>
         ${account.type ? `<div style="font-size: var(--fs-xs); color: var(--text-tertiary); margin-bottom: 12px;">${account.type} ${account.last4Digits ? `(••${account.last4Digits})` : ''}</div>` : ''}
+        ${account.notes ? `<div style="font-size: var(--fs-xs); color: var(--text-secondary); margin-bottom: 12px; font-style: italic;">"${account.notes}"</div>` : ''}
         <div style="font-size: var(--fs-xs); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">
           Current Balance
         </div>
@@ -244,6 +253,50 @@ export function attachAccountsListeners(refreshData) {
       }
       if (refreshData) refreshData();
     };
+
+    const editBtn = document.getElementById('btn-edit-account');
+    if (editBtn) {
+      editBtn.onclick = () => {
+        const selectedAcc = state.accounts.find(a => a.id === state.selectedAccountId);
+        if (!selectedAcc) return;
+        const stats = calculateAccountHistory(selectedAcc, state.transactions, state.accounts);
+        openEditAccountModal(selectedAcc, stats.balance, refreshData);
+      };
+    }
+
+    const deleteBtn = document.getElementById('btn-delete-account');
+    if (deleteBtn) {
+      deleteBtn.onclick = async () => {
+        const selectedAcc = state.accounts.find(a => a.id === state.selectedAccountId);
+        if (!selectedAcc) return;
+
+        const confirmed = await showConfirm({
+          icon: '🗑️',
+          title: 'Delete this account?',
+          message: 'All account-related transaction history may also be affected. This action cannot be undone.',
+          cancelText: 'Cancel',
+          confirmText: 'Delete',
+          danger: true
+        });
+
+        if (confirmed) {
+          try {
+            await deleteAccountDoc(state.user.uid, selectedAcc.id);
+            state.selectedAccountId = null;
+            if (window.appState) {
+              window.appState.selectedAccountId = null;
+              window.appState.accountOriginPage = null;
+            }
+            toast.success(`Account "${selectedAcc.name}" deleted successfully.`);
+            if (refreshData) refreshData();
+          } catch (err) {
+            console.error('Error deleting account:', err);
+            toast.error('Failed to delete account. Please try again.');
+          }
+        }
+      };
+    }
+
     return;
   }
 
@@ -351,3 +404,105 @@ export function openAddAccountModal(onSuccess) {
     }
   });
 }
+
+/**
+ * Edit Account Modal
+ */
+export function openEditAccountModal(account, currentBalance, onSuccess) {
+  const content = `
+    <form id="edit-account-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="edit-acc-name">Account Name</label>
+        <input type="text" id="edit-acc-name" class="form-input" value="${account.name || ''}" placeholder="e.g. SBI Savings, GPay, Cash" required autofocus />
+        <div class="form-error" id="edit-acc-name-error"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="edit-acc-type">Account Type</label>
+        <select id="edit-acc-type" class="form-select" required>
+          <option value="Cash" ${account.type === 'Cash' ? 'selected' : ''}>💵 Cash</option>
+          <option value="Bank" ${account.type === 'Bank' ? 'selected' : ''}>🏦 Bank Account</option>
+          <option value="UPI" ${account.type === 'UPI' ? 'selected' : ''}>📱 UPI / Wallet</option>
+          <option value="Other" ${account.type === 'Other' ? 'selected' : ''}>💳 Other</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="edit-acc-icon">Account Icon</label>
+        <input type="text" id="edit-acc-icon" class="form-input" value="${account.icon || '🏦'}" placeholder="e.g. 🏦, 💵, 📱, 💳" required />
+        <div class="form-error" id="edit-acc-icon-error"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Current Balance 🔒</label>
+        <div style="background: var(--bg-tertiary); padding: 12px 14px; border-radius: var(--radius-lg); font-weight: 800; font-size: 1.1rem; color: ${currentBalance < 0 ? 'var(--expense)' : 'var(--income)'}; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+          <span>${formatCurrency(currentBalance)}</span>
+          <span style="font-size: 0.75rem; color: var(--text-tertiary); font-weight: 700; letter-spacing: 0.05em; background: rgba(255,255,255,0.06); padding: 4px 8px; border-radius: 6px;">READ-ONLY 🔒</span>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 6px;">
+          Current balance is calculated automatically from transactions and cannot be changed manually.
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="edit-acc-notes">Notes / Description (Optional)</label>
+        <textarea id="edit-acc-notes" class="form-input" rows="2" style="resize: vertical;" placeholder="Add notes about this account...">${account.notes || ''}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="edit-acc-last4">Last 4 Digits (Optional)</label>
+        <input type="text" id="edit-acc-last4" class="form-input" value="${account.last4Digits || ''}" placeholder="e.g. 4321" maxlength="4" />
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-save-edit-account">
+        Save Changes
+      </button>
+    </form>
+  `;
+
+  openModal({
+    title: '✏️ Edit Account',
+    content,
+    onOpen: (modal) => {
+      modal.querySelector('#edit-account-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const name = modal.querySelector('#edit-acc-name').value;
+        const type = modal.querySelector('#edit-acc-type').value;
+        const icon = modal.querySelector('#edit-acc-icon').value;
+        const notes = modal.querySelector('#edit-acc-notes').value;
+        const last4Digits = modal.querySelector('#edit-acc-last4').value;
+
+        const nameErr = validateName(name);
+        if (nameErr) {
+          modal.querySelector('#edit-acc-name-error').textContent = nameErr;
+          return;
+        }
+
+        const submitBtn = modal.querySelector('#btn-save-edit-account');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span class="spinner"></span> Saving...`;
+
+        try {
+          await updateAccount(state.user.uid, account.id, {
+            name,
+            type,
+            icon,
+            notes,
+            last4Digits,
+            bankName: account.bankName || '',
+            initialBalance: account.initialBalance
+          });
+          closeModal();
+          toast.success(`Account details updated!`);
+          if (onSuccess) onSuccess();
+        } catch (err) {
+          console.error('Error updating account:', err);
+          toast.error('Unable to update account.');
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = 'Save Changes';
+        }
+      };
+    }
+  });
+}
+

@@ -164,9 +164,7 @@ export function validateTransaction(data, isNew = true) {
     if (dateErr) errors.date = dateErr;
   }
 
-  const reasonErr = validateRequired(data.reason, 'a reason');
-  if (reasonErr) errors.reason = reasonErr;
-
+  // Reason is optional
   const categoryErr = validateCategory(data.category);
   if (categoryErr) errors.category = categoryErr;
 
