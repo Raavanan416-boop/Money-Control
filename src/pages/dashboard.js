@@ -348,7 +348,9 @@ export function openAddTransactionModal(type = 'INCOME', onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="tx-reason">Reason (Optional)</label>
+        <label class="form-label" for="tx-reason">
+          Reason${isIncome ? ' <span style="font-weight:400;color:var(--text-secondary);font-size:0.85em;">(Optional)</span>' : ' <span style="color:var(--danger);" aria-hidden="true">*</span>'}
+        </label>
         <input type="text" id="tx-reason" class="form-input" placeholder="${isIncome ? 'e.g. Monthly Salary' : 'e.g. Lunch with friends'}" />
         <div class="form-error" id="tx-reason-error"></div>
       </div>
@@ -442,8 +444,13 @@ export function openAddTransactionModal(type = 'INCOME', onSaveSuccess) {
         const validation = validateTransaction({ amount, date, reason, category }, true);
         if (!validation.isValid) {
           if (validation.errors.amount) modal.querySelector('#tx-amount-error').textContent = validation.errors.amount;
-          if (validation.errors.reason) modal.querySelector('#tx-reason-error').textContent = validation.errors.reason;
           if (validation.errors.category) modal.querySelector('#tx-category-error').textContent = validation.errors.category;
+          isValid = false;
+        }
+
+        // Reason is required for expenses, optional for income
+        if (!isIncome && !reason.trim()) {
+          modal.querySelector('#tx-reason-error').textContent = 'Reason is required for expenses.';
           isValid = false;
         }
 
@@ -741,8 +748,11 @@ export function openEditTransactionModal(tx, onSaveSuccess) {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="edit-tx-reason">Reason (Optional)</label>
+        <label class="form-label" for="edit-tx-reason">
+          Reason${isIncome ? ' <span style="font-weight:400;color:var(--text-secondary);font-size:0.85em;">(Optional)</span>' : ' <span style="color:var(--danger);" aria-hidden="true">*</span>'}
+        </label>
         <input type="text" id="edit-tx-reason" class="form-input" value="${tx.reason || ''}" />
+        <div class="form-error" id="edit-tx-reason-error"></div>
       </div>
 
       <div class="form-group">
@@ -776,8 +786,18 @@ export function openEditTransactionModal(tx, onSaveSuccess) {
         const category = modal.querySelector('#edit-tx-category').value;
         const notes = modal.querySelector('#edit-tx-notes').value;
 
+        // Clear any previous reason error
+        const reasonErrEl = modal.querySelector('#edit-tx-reason-error');
+        if (reasonErrEl) reasonErrEl.textContent = '';
+
         const validation = validateTransaction({ amount, date, reason, category }, false);
         if (!validation.isValid) return;
+
+        // Reason is required for expense edits
+        if (!isIncome && !reason.trim()) {
+          if (reasonErrEl) reasonErrEl.textContent = 'Reason is required for expenses.';
+          return;
+        }
 
         const submitBtn = modal.querySelector('#btn-update-tx');
         submitBtn.disabled = true;

@@ -202,6 +202,7 @@ export const INCOME_CATEGORIES = [
   { value: 'Gift', label: 'Gift' },
   { value: 'Freelance', label: 'Freelance' },
   { value: 'Refund', label: 'Refund' },
+  { value: 'Scholarship', label: '🎓 Scholarship' },
   { value: 'Other', label: 'Other' }
 ];
 
