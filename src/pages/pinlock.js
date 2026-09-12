@@ -530,6 +530,10 @@ function handleDigitKey(digit) {
     if (pinState.pin.length < PIN_LENGTH) {
       pinState.pin += digit;
       updateDots();
+      if (pinState.pin.length === PIN_LENGTH) {
+        // Auto-validate as soon as all digits are entered
+        setTimeout(() => handleUnlock(), 150);
+      }
     }
     // Any digit beyond PIN_LENGTH is strictly ignored
   }

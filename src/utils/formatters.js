@@ -197,13 +197,13 @@ export const EXPENSE_CATEGORIES = [
 ];
 
 export const INCOME_CATEGORIES = [
-  { value: 'Pocket Money', label: 'Pocket Money' },
-  { value: 'Salary', label: 'Salary' },
-  { value: 'Gift', label: 'Gift' },
-  { value: 'Freelance', label: 'Freelance' },
-  { value: 'Refund', label: 'Refund' },
-  { value: 'Scholarship', label: '🎓 Scholarship' },
-  { value: 'Other', label: 'Other' }
+  { value: 'Pocket Money', label: '💰 Pocket Money', emoji: '💰' },
+  { value: 'Salary', label: '💼 Salary', emoji: '💼' },
+  { value: 'Gift', label: '🎁 Gift', emoji: '🎁' },
+  { value: 'Freelance', label: '💻 Freelance', emoji: '💻' },
+  { value: 'Refund', label: '🔄 Refund', emoji: '🔄' },
+  { value: 'Scholarship', label: '🎓 Scholarship', emoji: '🎓' },
+  { value: 'Other', label: '💵 Other', emoji: '💵' }
 ];
 
 /**
