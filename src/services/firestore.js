@@ -252,7 +252,7 @@ export async function addTransaction(uid, data) {
     reason: (data.reason || '').trim(),
     category: data.category || (data.type === 'TRANSFER' ? 'Transfer' : 'Other'),
     notes: (data.notes || '').trim(),
-    createdAt: new Date().toISOString()
+    createdAt: data.createdAt || new Date().toISOString()
   };
 
   if (data.type === 'INCOME') {

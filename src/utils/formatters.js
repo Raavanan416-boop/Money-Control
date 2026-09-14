@@ -54,17 +54,63 @@ export function formatDateLong(dateStr) {
 }
 
 /**
- * Format ISO timestamp to time
- * e.g., '2026-08-28T14:30:00' → '2:30 PM'
+ * Format ISO timestamp or Date object to clean 12-hour time format with AM/PM
+ * e.g., '2026-08-28T14:30:00' → '2:30 PM', '2026-09-14T20:05:00+05:30' → '8:05 PM'
  */
-export function formatTime(isoStr) {
-  if (!isoStr) return '';
-  const date = new Date(isoStr);
-  return date.toLocaleTimeString('en-IN', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
+export function formatTime(timestamp) {
+  if (!timestamp) return '';
+  let date;
+  if (timestamp instanceof Date) {
+    date = timestamp;
+  } else if (timestamp && typeof timestamp.toDate === 'function') {
+    date = timestamp.toDate();
+  } else if (timestamp && typeof timestamp === 'object' && timestamp.seconds !== undefined) {
+    date = new Date(timestamp.seconds * 1000);
+  } else if (typeof timestamp === 'number') {
+    date = new Date(timestamp);
+  } else if (typeof timestamp === 'string') {
+    const trimmed = timestamp.trim();
+    if (/^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(trimmed)) {
+      return trimmed.toUpperCase();
+    }
+    date = new Date(trimmed);
+  } else {
+    date = new Date(timestamp);
+  }
+
+  if (!date || isNaN(date.getTime())) {
+    return '';
+  }
+
+  let hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const minutesStr = String(minutes).padStart(2, '0');
+  return `${hours}:${minutesStr} ${ampm}`;
+}
+
+/**
+ * Safely get 12-hour formatted time for a transaction.
+ * Returns 'Time unavailable' if no timestamp exists or is invalid.
+ */
+export function getTransactionTime(tx) {
+  if (!tx) return 'Time unavailable';
+  const rawTime = tx.createdAt || tx.timestamp || tx.time;
+  if (!rawTime) return 'Time unavailable';
+
+  // Handle case where rawTime might be string 'HH:mm' or 'HH:mm:ss'
+  if (typeof rawTime === 'string' && /^\d{1,2}:\d{2}(:\d{2})?$/.test(rawTime.trim())) {
+    const baseDate = tx.date || getTodayDate();
+    const date = new Date(`${baseDate}T${rawTime.trim()}`);
+    if (!isNaN(date.getTime())) {
+      return formatTime(date) || 'Time unavailable';
+    }
+  }
+
+  const formatted = formatTime(rawTime);
+  return formatted || 'Time unavailable';
 }
 
 /**
@@ -115,9 +161,10 @@ export function getCurrentMonth() {
  */
 export function getRelativeDate(dateStr) {
   const today = getTodayDate();
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yest = new Date();
+  yest.setDate(yest.getDate() - 1);
+  // Use local timezone arithmetic (same pattern as getTodayDate) — NOT toISOString() which is UTC
+  const yesterdayStr = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`;
 
   if (dateStr === today) return 'Today';
   if (dateStr === yesterdayStr) return 'Yesterday';

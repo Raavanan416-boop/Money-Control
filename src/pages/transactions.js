@@ -6,6 +6,7 @@ import {
   formatCurrency,
   formatDate,
   formatTime,
+  getTransactionTime,
   escapeHtml,
   getCategoryEmoji,
   getTodayDate,
@@ -350,7 +351,7 @@ export function openTransactionDetailsModal(tx, onSaveSuccess) {
   };
 
   const emoji = tx.type === 'TRANSFER' ? '↔' : (tx.type === 'INCOME' ? '💰' : getCategoryEmoji(tx.category));
-  const timeStr = tx.createdAt ? formatTime(tx.createdAt) : '12:00 PM';
+  const timeStr = getTransactionTime(tx);
   const dateStr = formatDate(tx.date);
 
   const content = `

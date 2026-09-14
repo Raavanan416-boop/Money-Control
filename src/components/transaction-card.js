@@ -2,7 +2,7 @@
 // 💰 Money Control V2 — Transaction Card Component
 // ============================================
 
-import { formatCurrency, getTodayDate, getShortMonthName, getCategoryEmoji, escapeHtml, getRelativeDate } from '../utils/formatters.js';
+import { formatCurrency, getTodayDate, getShortMonthName, getCategoryEmoji, escapeHtml, getRelativeDate, getTransactionTime } from '../utils/formatters.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -49,18 +49,20 @@ function renderTimelineRow(tx, accounts, isLast) {
     tx.reason || (isTransfer ? 'Account Transfer' : tx.category || 'Transaction')
   );
 
+  const timeStr = getTransactionTime(tx);
+
   let subtitle = '';
   if (isIncome) {
     const acc = getAccName(tx.destinationAccountId);
-    subtitle = [tx.category, acc].filter(Boolean).join(' · ');
+    subtitle = [tx.category, acc, timeStr].filter(Boolean).join(' · ');
   } else if (isExpense) {
     const acc = getAccName(tx.sourceAccountId);
-    subtitle = [tx.category, acc].filter(Boolean).join(' · ');
+    subtitle = [tx.category, acc, timeStr].filter(Boolean).join(' · ');
   } else {
     const src  = getAccName(tx.sourceAccountId);
     const dest = getAccName(tx.destinationAccountId);
     const route = (src && dest) ? `${src} → ${dest}` : (src || dest || '');
-    subtitle = [route, 'Transfer'].filter(Boolean).join(' · ');
+    subtitle = [route, 'Transfer', timeStr].filter(Boolean).join(' · ');
   }
 
   let amountStr = '';
@@ -167,6 +169,9 @@ export function renderTransactionItem(tx, options = {}) {
   else if (isExpense)  { typeBadge = '🔴'; sign = '−'; accountName = getAccName(tx.sourceAccountId)      || 'Account'; }
   else if (isTransfer) { typeBadge = '🟣'; sign = '↕'; accountName = `${getAccName(tx.sourceAccountId) || 'Source'} → ${getAccName(tx.destinationAccountId) || 'Dest'}`; }
 
+  const timeStr = getTransactionTime(tx);
+  const metaStr = [accountName, timeStr].filter(Boolean).join(' · ');
+
   return `
     <div class="transaction-item animate-fade-in" data-tx-id="${tx.id}">
       <div class="transaction-type-badge ${typeClass}">${typeBadge}</div>
@@ -174,7 +179,7 @@ export function renderTransactionItem(tx, options = {}) {
         <div class="transaction-reason">
           ${escapeHtml(tx.reason) || (isTransfer ? 'Account Transfer' : escapeHtml(tx.category) || 'Transaction')}
         </div>
-        <div class="transaction-meta"><span>${escapeHtml(accountName)}</span></div>
+        <div class="transaction-meta"><span>${escapeHtml(metaStr)}</span></div>
         ${showNotes && tx.notes ? `<div class="transaction-notes-sub">${escapeHtml(tx.notes)}</div>` : ''}
       </div>
       <div class="transaction-amount">
