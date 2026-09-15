@@ -191,7 +191,6 @@ function renderFriendsMoneySummaryCard(records) {
       <div class="fm-dashboard-card" id="dashboard-friends-money-card" tabindex="0" role="button" aria-label="View Friends Money">
         <div class="fm-dashboard-header">
           <div class="fm-dashboard-title">🤝 Friends Money</div>
-          <div class="fm-dashboard-link">View Details →</div>
         </div>
         <div class="fm-dashboard-stats">
           <div class="fm-dashboard-stat">
