@@ -153,20 +153,6 @@ export function renderDashboardPage(state) {
         </div>
       </div>
 
-      <!-- 5. Quick actions -->
-      <div class="section quick-actions-section">
-        <div class="quick-actions-row">
-          <button class="quick-action-btn income" id="btn-quick-add-money">
-            <span>+ Add Money</span>
-          </button>
-          <button class="quick-action-btn expense" id="btn-quick-add-expense">
-            <span>− Expense</span>
-          </button>
-        </div>
-        <button class="quick-action-btn transfer full-width" id="btn-quick-transfer">
-          <span>↕ Transfer</span>
-        </button>
-      </div>
 
       <!-- 5b. Friends Money Summary Card -->
       ${renderFriendsMoneySummaryCard(dashboardState.friendMoneyRecords)}
@@ -301,15 +287,6 @@ export function attachDashboardListeners(navigateFn, refreshData) {
   const viewAllBtn = document.getElementById('link-view-all-tx');
   if (viewAllBtn) viewAllBtn.onclick = () => navigateFn('transactions');
 
-  // Quick Action Buttons
-  const addMoneyBtn = document.getElementById('btn-quick-add-money');
-  if (addMoneyBtn) addMoneyBtn.onclick = () => openAddTransactionModal('INCOME', refreshData);
-
-  const addExpenseBtn = document.getElementById('btn-quick-add-expense');
-  if (addExpenseBtn) addExpenseBtn.onclick = () => openAddTransactionModal('EXPENSE', refreshData);
-
-  const transferBtn = document.getElementById('btn-quick-transfer');
-  if (transferBtn) transferBtn.onclick = () => openTransferModal(refreshData);
 
   // Empty state CTA
   const emptyAddBtn = document.getElementById('empty-add-money-btn');
