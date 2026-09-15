@@ -1,0 +1,747 @@
+/* ============================================
+   🤝 Money Control — Friends Money Styles
+   ============================================ */
+
+/* ---------- Page Layout ---------- */
+.friends-money-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ---------- Summary Cards ---------- */
+.fm-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.fm-summary-card {
+  border-radius: var(--radius-2xl);
+  padding: 20px 16px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.fm-summary-card::before {
+  content: '';
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 70%);
+  top: -30px;
+  right: -20px;
+  pointer-events: none;
+}
+
+.fm-summary-card.gave {
+  background: linear-gradient(135deg, #059669 0%, #10B981 50%, #34D399 100%);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+  color: white;
+}
+
+.fm-summary-card.borrowed {
+  background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 50%, #A78BFA 100%);
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.3);
+  color: white;
+}
+
+.fm-summary-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.9;
+  margin-bottom: 6px;
+}
+
+.fm-summary-amount {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+  position: relative;
+  z-index: 1;
+}
+
+.fm-summary-icon {
+  font-size: 1.25rem;
+  margin-bottom: 4px;
+}
+
+/* ---------- Search & Filters ---------- */
+.fm-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.fm-search-wrapper {
+  position: relative;
+}
+
+.fm-search-input {
+  width: 100%;
+  padding: 12px 16px 12px 40px;
+  border-radius: var(--radius-xl);
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-family: var(--font-family);
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.fm-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-bg);
+}
+
+.fm-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.9375rem;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.fm-filter-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.fm-filter-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.fm-filter-tab {
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  font-family: var(--font-family);
+}
+
+.fm-filter-tab:hover {
+  background: var(--primary-bg);
+  border-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.fm-filter-tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+/* ---------- Add Button ---------- */
+.fm-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 20px;
+  border-radius: var(--radius-xl);
+  background: var(--gradient-primary);
+  color: white;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-family: var(--font-family);
+  box-shadow: 0 4px 16px rgba(108, 99, 255, 0.3);
+}
+
+.fm-add-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(108, 99, 255, 0.4);
+}
+
+.fm-add-btn:active {
+  transform: translateY(0);
+}
+
+/* ---------- Record Cards ---------- */
+.fm-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.fm-record-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-card);
+  transition: all var(--transition-base);
+  cursor: pointer;
+}
+
+.fm-record-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--primary-bg-hover);
+}
+
+.fm-record-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.fm-record-friend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fm-record-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.fm-record-avatar.gave {
+  background: var(--income-bg);
+  color: var(--income);
+}
+
+.fm-record-avatar.borrowed {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8B5CF6;
+}
+
+.fm-record-name {
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+
+.fm-record-type {
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.fm-record-type.gave {
+  color: var(--income);
+}
+
+.fm-record-type.borrowed {
+  color: #8B5CF6;
+}
+
+.fm-record-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.fm-record-status.pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #F59E0B;
+}
+
+.fm-record-status.settled {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10B981;
+}
+
+.fm-record-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fm-record-amount-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fm-record-amount {
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.fm-record-remaining {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.fm-record-remaining.settled {
+  color: var(--income);
+}
+
+.fm-record-reason {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.fm-record-date {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.fm-record-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+.fm-repay-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--primary-bg);
+  color: var(--primary);
+  border: 1.5px solid var(--primary-light);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-family);
+}
+
+.fm-repay-btn:hover {
+  background: var(--primary-bg-hover);
+}
+
+.fm-delete-btn {
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--expense-bg);
+  color: var(--expense);
+  border: 1.5px solid rgba(239, 68, 68, 0.2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-family);
+}
+
+.fm-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+/* ---------- Repayment History ---------- */
+.fm-repayment-breakdown {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  font-size: 0.75rem;
+}
+
+.fm-repayment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  color: var(--text-secondary);
+}
+
+.fm-repayment-row.total {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.fm-repayment-row.returned {
+  color: var(--income);
+}
+
+.fm-repayment-row.remaining {
+  font-weight: 800;
+  color: var(--warning);
+  border-top: 1px dashed var(--border-color);
+  padding-top: 6px;
+  margin-top: 4px;
+}
+
+.fm-repayment-row.remaining.settled {
+  color: var(--income);
+}
+
+.fm-repayment-history {
+  margin-top: 8px;
+}
+
+.fm-repayment-history-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+
+.fm-repayment-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+.fm-repayment-entry-amount {
+  color: var(--income);
+  font-weight: 600;
+}
+
+/* ---------- Friend Detail View ---------- */
+.fm-friend-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: var(--space-4);
+}
+
+.fm-friend-detail-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: var(--primary-bg);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.fm-friend-detail-name {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.fm-friend-detail-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.fm-friend-stat {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  text-align: center;
+  border: 1px solid var(--border-color);
+}
+
+.fm-friend-stat-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+
+.fm-friend-stat-value {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.fm-friend-stat-value.green {
+  color: var(--income);
+}
+
+.fm-friend-stat-value.purple {
+  color: #8B5CF6;
+}
+
+.fm-friend-stat-value.orange {
+  color: var(--warning);
+}
+
+.fm-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-family);
+  margin-bottom: var(--space-4);
+}
+
+.fm-back-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+/* ---------- Empty State ---------- */
+.fm-empty {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.fm-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+}
+
+.fm-empty-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.fm-empty-text {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ---------- Dashboard Summary Card ---------- */
+.fm-dashboard-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.fm-dashboard-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--primary-bg-hover);
+}
+
+.fm-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.fm-dashboard-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.fm-dashboard-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.fm-dashboard-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.fm-dashboard-stat {
+  flex: 1;
+}
+
+.fm-dashboard-stat-label {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+.fm-dashboard-stat-value {
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+
+.fm-dashboard-stat-value.green {
+  color: var(--income);
+}
+
+.fm-dashboard-stat-value.purple {
+  color: #8B5CF6;
+}
+
+/* ---------- Modal Form Styles ---------- */
+.fm-form-group {
+  margin-bottom: 14px;
+}
+
+.fm-form-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fm-form-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-family: var(--font-family);
+  outline: none;
+  transition: border-color var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.fm-form-input:focus {
+  border-color: var(--primary);
+}
+
+.fm-form-select {
+  width: 100%;
+  padding: 10px 14px;
+  padding-right: 2.5rem;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-family: var(--font-family);
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast);
+}
+
+.fm-form-select:focus {
+  border-color: var(--primary);
+}
+
+.fm-form-select option {
+  background: var(--bg-card, #1E293B);
+  color: var(--text-primary, #F8FAFC);
+  padding: 8px 12px;
+}
+
+.fm-form-select option:disabled {
+  color: var(--text-tertiary, #64748B);
+}
+
+.fm-form-error {
+  color: var(--danger, #EF4444);
+  font-size: 0.6875rem;
+  margin-top: 4px;
+}
+
+.fm-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.fm-type-option {
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-family);
+}
+
+.fm-type-option:hover {
+  border-color: var(--primary-light);
+}
+
+.fm-type-option.active.gave {
+  background: var(--income-bg);
+  border-color: var(--income);
+  color: var(--income);
+}
+
+.fm-type-option.active.borrowed {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: #8B5CF6;
+  color: #8B5CF6;
+}
+
+.fm-form-submit {
+  width: 100%;
+  padding: 12px 20px;
+  border-radius: var(--radius-xl);
+  background: var(--gradient-primary);
+  color: white;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-family: var(--font-family);
+  margin-top: 8px;
+}
+
+.fm-form-submit:hover {
+  box-shadow: 0 4px 16px rgba(108, 99, 255, 0.3);
+}
+
+.fm-form-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------- Section Divider ---------- */
+.fm-section-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}

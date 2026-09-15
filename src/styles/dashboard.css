@@ -292,6 +292,19 @@
   box-shadow: 0 4px 14px rgba(139, 131, 255, 0.35);
 }
 
+.quick-action-btn.friends {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8B5CF6;
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+.quick-action-btn.friends:hover,
+.quick-action-btn.friends:active {
+  background: #8B5CF6;
+  color: white;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+}
+
 .quick-action-btn.full-width {
   width: 100%;
 }

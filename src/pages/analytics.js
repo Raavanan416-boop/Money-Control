@@ -30,6 +30,8 @@ let selectedYear = new Date().getFullYear();
  */
 export function renderAnalyticsPage(appState) {
   state = { ...state, ...appState };
+  // Exclude friend money transactions from analytics
+  state.transactions = (appState.transactions || []).filter(tx => !tx.isFriendMoney);
   destroyAllCharts();
 
   const { totalMoney } = calculateAccountBalances(state.accounts, state.transactions);

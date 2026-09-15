@@ -26,6 +26,7 @@ import { generateBudgetAlerts } from '../services/budget.js';
 import { validateTransaction, validateAmount, validateRequired, validateTodayDate } from '../utils/validators.js';
 import { toast } from '../utils/toast.js';
 import { isOnline } from '../services/pwa.js';
+import { getFriendMoneySummary } from '../services/friends-money.js';
 
 let dashboardState = {
   user: null,
@@ -167,6 +168,9 @@ export function renderDashboardPage(state) {
         </button>
       </div>
 
+      <!-- 5b. Friends Money Summary Card -->
+      ${renderFriendsMoneySummaryCard(dashboardState.friendMoneyRecords)}
+
       <!-- 6. Today Activity -->
       <div class="section recent-transactions">
         <div class="section-header">
@@ -181,6 +185,37 @@ export function renderDashboardPage(state) {
             ? renderTransactionList(recentTx, { showActions: false, showDate: true, accounts: dashboardState.accounts })
             : renderEmptyTransactions('No transactions today', 'Transactions added today will appear here. View full history in Txns.')
           }
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render Friends Money summary card for the dashboard
+ */
+function renderFriendsMoneySummaryCard(records) {
+  const summary = getFriendMoneySummary(records || []);
+  if (summary.theyOweMe === 0 && summary.iOwe === 0 && summary.pendingCount === 0 && summary.settledCount === 0) {
+    return ''; // Don't show card if no friend money records exist
+  }
+
+  return `
+    <div class="section">
+      <div class="fm-dashboard-card" id="dashboard-friends-money-card" tabindex="0" role="button" aria-label="View Friends Money">
+        <div class="fm-dashboard-header">
+          <div class="fm-dashboard-title">🤝 Friends Money</div>
+          <div class="fm-dashboard-link">View Details →</div>
+        </div>
+        <div class="fm-dashboard-stats">
+          <div class="fm-dashboard-stat">
+            <div class="fm-dashboard-stat-label">They Owe Me</div>
+            <div class="fm-dashboard-stat-value green">${formatCurrency(summary.theyOweMe)}</div>
+          </div>
+          <div class="fm-dashboard-stat">
+            <div class="fm-dashboard-stat-label">I Owe</div>
+            <div class="fm-dashboard-stat-value purple">${formatCurrency(summary.iOwe)}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -218,6 +253,16 @@ export function attachDashboardListeners(navigateFn, refreshData) {
   const emptyAddAccBtn = document.getElementById('empty-add-account-btn');
   if (emptyAddAccBtn) {
     emptyAddAccBtn.onclick = () => navigateFn('accounts');
+  }
+
+  // Friends Money dashboard card
+  const fmCard = document.getElementById('dashboard-friends-money-card');
+  if (fmCard) {
+    const goToFM = () => navigateFn('friends-money');
+    fmCard.onclick = goToFM;
+    fmCard.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToFM(); }
+    };
   }
 
   // Quick Nav

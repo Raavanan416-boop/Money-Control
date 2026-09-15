@@ -29,6 +29,7 @@ import { renderTransactionsPage, attachTransactionsListeners } from './pages/tra
 import { renderMoneyControlPage, attachMoneyControlListeners } from './pages/money-control.js';
 import { renderAnalyticsPage, attachAnalyticsListeners } from './pages/analytics.js';
 import { renderBudgetPage, attachBudgetListeners } from './pages/budget.js';
+import { renderFriendsMoneyPage, attachFriendsMoneyListeners, resetFriendsMoneyState, openAddFriendMoneyModal } from './pages/friends-money.js';
 import { renderProfilePage, attachProfileListeners } from './pages/profile.js';
 import { renderSettingsPage, attachSettingsListeners } from './pages/settings.js';
 import { renderTotalMoneyHistoryPage, attachTotalMoneyHistoryListeners } from './pages/total-money-history.js';
@@ -36,7 +37,8 @@ import { renderTotalMoneyHistoryPage, attachTotalMoneyHistoryListeners } from '.
 // Components & Skeletons
 import { renderSidebar, renderMobileHeader, renderMobileDrawer, renderBottomNav, attachNavListeners } from './components/navbar.js';
 import { renderDashboardSkeleton } from './components/skeleton.js';
-import { openModal } from './components/modal.js';
+import { openModal, closeModal } from './components/modal.js';
+import { subscribeFriendMoney } from './services/friends-money.js';
 
 // App State
 const appState = {
@@ -45,10 +47,12 @@ const appState = {
   accounts: [],
   transactions: [],
   budgets: [],
+  friendMoneyRecords: [],
   activePage: 'dashboard',
   selectedAccountId: null,
   unsubscribeAccounts: null,
   unsubscribeTx: null,
+  unsubscribeFriendMoney: null,
   authLoading: true,
   dashboardError: null,
   // V3 PIN lock state
@@ -130,6 +134,10 @@ function init() {
       appState.unsubscribeTx();
       appState.unsubscribeTx = null;
     }
+    if (appState.unsubscribeFriendMoney) {
+      appState.unsubscribeFriendMoney();
+      appState.unsubscribeFriendMoney = null;
+    }
 
     if (!user) {
       appState.user = null;
@@ -137,6 +145,7 @@ function init() {
       appState.accounts = [];
       appState.transactions = [];
       appState.budgets = [];
+      appState.friendMoneyRecords = [];
       appState.isLocked = false;
       appState.pinEnabled = false;
       appState.pinHash = null;
@@ -260,6 +269,18 @@ async function loadUserData(uid) {
       }
     });
 
+    // Subscribe to Friend Money records in real-time
+    appState.unsubscribeFriendMoney = subscribeFriendMoney(uid, (records, error) => {
+      if (error) {
+        console.error('Friend money subscription error:', error);
+      } else {
+        appState.friendMoneyRecords = records;
+      }
+      if (!appState.isLocked) {
+        renderAppLayout();
+      }
+    });
+
     // Handle PIN lock flow
     if (appState.pinEnabled && appState.pinHash) {
       // User has PIN enabled — show lock screen
@@ -326,7 +347,7 @@ function renderAppLayout() {
   if (appState.isLocked) return;
 
   const hash = window.location.hash.replace('#/', '').replace('#', '');
-  if (hash && ['dashboard', 'accounts', 'transactions', 'money-control', 'analytics', 'budget', 'profile', 'settings', 'total-money-history'].includes(hash)) {
+  if (hash && ['dashboard', 'accounts', 'transactions', 'money-control', 'analytics', 'budget', 'friends-money', 'profile', 'settings', 'total-money-history'].includes(hash)) {
     appState.activePage = hash;
   } else {
     appState.activePage = 'dashboard';
@@ -364,6 +385,8 @@ function renderCurrentPage(page) {
       return renderAnalyticsPage(appState);
     case 'budget':
       return renderBudgetPage(appState);
+    case 'friends-money':
+      return renderFriendsMoneyPage(appState);
     case 'profile':
       return renderProfilePage(appState);
     case 'settings':
@@ -410,6 +433,9 @@ function attachCurrentPageListeners(page) {
     case 'budget':
       attachBudgetListeners(refreshFn);
       break;
+    case 'friends-money':
+      attachFriendsMoneyListeners(refreshFn);
+      break;
     case 'profile':
       attachProfileListeners(() => renderAuthView(), refreshFn);
       break;
@@ -429,8 +455,15 @@ function navigateTo(page) {
   if (page !== 'accounts') {
     appState.selectedAccountId = null;
   }
+  if (page !== 'friends-money') {
+    resetFriendsMoneyState();
+  }
   appState.activePage = page;
-  window.location.hash = `#/${page}`;
+  if (window.location.hash === `#/${page}`) {
+    renderAppLayout();
+  } else {
+    window.location.hash = `#/${page}`;
+  }
 }
 
 function handleRoute() {
@@ -522,7 +555,7 @@ function setupActivityTracking() {
 }
 
 /**
- * Mobile FAB Add Menu Modal (3 Actions: Income, Expense, Transfer)
+ * Mobile FAB Add Menu Modal (4 Actions: Income, Expense, Transfer, Friends Money)
  */
 function openAddMenuModal() {
   const content = `
@@ -531,10 +564,13 @@ function openAddMenuModal() {
         <span>➕</span> Add Money (Income)
       </button>
       <button class="quick-action-btn expense" id="fab-modal-add-expense">
-        <span>−</span> Add Expense
+        <span>➖</span> Add Expense
       </button>
-      <button class="quick-action-btn" id="fab-modal-transfer" style="background: var(--primary-bg); color: var(--primary); border: 1.5px solid var(--primary-light);">
+      <button class="quick-action-btn transfer" id="fab-modal-transfer" style="background: var(--primary-bg); color: var(--primary); border: 1.5px solid var(--primary-light);">
         <span>↔</span> Transfer Money
+      </button>
+      <button class="quick-action-btn friends" id="fab-modal-friends-money" style="background: rgba(139, 92, 246, 0.12); color: #8B5CF6; border: 1.5px solid rgba(139, 92, 246, 0.25);">
+        <span>🤝</span> Friends Money
       </button>
     </div>
   `;
@@ -546,6 +582,7 @@ function openAddMenuModal() {
       const incomeBtn = modal.querySelector('#fab-modal-add-income');
       const expenseBtn = modal.querySelector('#fab-modal-add-expense');
       const transferBtn = modal.querySelector('#fab-modal-transfer');
+      const friendsBtn = modal.querySelector('#fab-modal-friends-money');
 
       const refreshFn = async () => {
         if (appState.user) {
@@ -558,6 +595,15 @@ function openAddMenuModal() {
       if (incomeBtn) incomeBtn.onclick = () => openAddTransactionModal('INCOME', refreshFn);
       if (expenseBtn) expenseBtn.onclick = () => openAddTransactionModal('EXPENSE', refreshFn);
       if (transferBtn) transferBtn.onclick = () => openTransferModal(refreshFn);
+      if (friendsBtn) {
+        friendsBtn.onclick = () => {
+          closeModal();
+          navigateTo('friends-money');
+          setTimeout(() => {
+            openAddFriendMoneyModal(refreshFn, appState);
+          }, 60);
+        };
+      }
     }
   });
 }

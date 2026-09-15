@@ -227,7 +227,7 @@ export function calculateAccountStats(account, transactions) {
  */
 export function calculateTotalIncome(transactions) {
   return transactions
-    .filter(tx => tx.type === 'INCOME')
+    .filter(tx => tx.type === 'INCOME' && !tx.isFriendMoney)
     .reduce((sum, tx) => sum + Number(tx.amount), 0);
 }
 
@@ -236,7 +236,7 @@ export function calculateTotalIncome(transactions) {
  */
 export function calculateTotalExpenses(transactions) {
   return transactions
-    .filter(tx => tx.type === 'EXPENSE')
+    .filter(tx => tx.type === 'EXPENSE' && !tx.isFriendMoney)
     .reduce((sum, tx) => sum + Number(tx.amount), 0);
 }
 
@@ -271,7 +271,7 @@ export function calculateTotals(accounts, transactions) {
  * Calculate daily totals for a specific date (Excludes TRANSFERS from net change)
  */
 export function calculateDailyTotals(transactions, dateStr) {
-  const dayTx = transactions.filter(tx => tx.date === dateStr);
+  const dayTx = transactions.filter(tx => tx.date === dateStr && !tx.isFriendMoney);
   const added = dayTx.filter(tx => tx.type === 'INCOME').reduce((sum, tx) => sum + tx.amount, 0);
   const spent = dayTx.filter(tx => tx.type === 'EXPENSE').reduce((sum, tx) => sum + tx.amount, 0);
   const transferred = dayTx.filter(tx => tx.type === 'TRANSFER').reduce((sum, tx) => sum + tx.amount, 0);
@@ -291,7 +291,7 @@ export function calculateDailyTotals(transactions, dateStr) {
  */
 export function calculateWeeklyTotals(transactions, dateStr) {
   const { start, end } = getWeekRange(dateStr);
-  const weekTx = transactions.filter(tx => tx.date >= start && tx.date <= end);
+  const weekTx = transactions.filter(tx => tx.date >= start && tx.date <= end && !tx.isFriendMoney);
   const added = weekTx.filter(tx => tx.type === 'INCOME').reduce((sum, tx) => sum + tx.amount, 0);
   const spent = weekTx.filter(tx => tx.type === 'EXPENSE').reduce((sum, tx) => sum + tx.amount, 0);
   const transferred = weekTx.filter(tx => tx.type === 'TRANSFER').reduce((sum, tx) => sum + tx.amount, 0);
@@ -312,7 +312,7 @@ export function calculateWeeklyTotals(transactions, dateStr) {
  * Calculate monthly totals
  */
 export function calculateMonthlyTotals(transactions, monthStr) {
-  const monthTx = transactions.filter(tx => tx.date && tx.date.startsWith(monthStr));
+  const monthTx = transactions.filter(tx => tx.date && tx.date.startsWith(monthStr) && !tx.isFriendMoney);
   const added = monthTx.filter(tx => tx.type === 'INCOME').reduce((sum, tx) => sum + tx.amount, 0);
   const spent = monthTx.filter(tx => tx.type === 'EXPENSE').reduce((sum, tx) => sum + tx.amount, 0);
   const transferred = monthTx.filter(tx => tx.type === 'TRANSFER').reduce((sum, tx) => sum + tx.amount, 0);
@@ -332,8 +332,8 @@ export function calculateMonthlyTotals(transactions, monthStr) {
  */
 export function calculateCategoryTotals(transactions, monthStr) {
   const filtered = monthStr
-    ? transactions.filter(tx => tx.type === 'EXPENSE' && tx.date && tx.date.startsWith(monthStr))
-    : transactions.filter(tx => tx.type === 'EXPENSE');
+    ? transactions.filter(tx => tx.type === 'EXPENSE' && !tx.isFriendMoney && tx.date && tx.date.startsWith(monthStr))
+    : transactions.filter(tx => tx.type === 'EXPENSE' && !tx.isFriendMoney);
 
   const totals = {};
   let totalExpenses = 0;
