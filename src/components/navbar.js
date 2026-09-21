@@ -66,13 +66,9 @@ export function renderMobileDrawer(activePage, user, profile) {
   const initial = name ? name.charAt(0).toUpperCase() : '👤';
 
   const navLinks = [
-    { id: 'dashboard', icon: '🏠', label: 'Dashboard' },
-    { id: 'accounts', icon: '🏦', label: 'Accounts' },
-    { id: 'transactions', icon: '💸', label: 'Transactions' },
-    { id: 'analytics', icon: '📊', label: 'Analytics' },
     { id: 'budget', icon: '🎯', label: 'Budget' },
-    { id: 'friends-money', icon: '🤝', label: 'Friends Money' },
     { id: 'money-control', icon: '📅', label: 'Money Control' },
+    { id: 'friends-money', icon: '🤝', label: 'Friends Money' },
     { id: 'profile', icon: '👤', label: 'Profile' },
     { id: 'settings', icon: '⚙️', label: 'Settings' },
   ];

@@ -8,6 +8,7 @@ import {
   getCategoryEmoji
 } from '../utils/formatters.js';
 import {
+  calculateTotals,
   getMonthlyReport,
   calculateAccountDistribution,
   calculateAccountBalances
@@ -19,7 +20,9 @@ let state = {
   user: null,
   profile: null,
   accounts: [],
-  transactions: []
+  transactions: [],
+  allAccounts: [],
+  allTransactions: []
 };
 
 let selectedMonthIndex = new Date().getMonth();
@@ -29,12 +32,23 @@ let selectedYear = new Date().getFullYear();
  * Render Analytics HTML
  */
 export function renderAnalyticsPage(appState) {
-  state = { ...state, ...appState };
+  const allAccounts = appState.allAccounts || appState.accounts || state.allAccounts || state.accounts || [];
+  const allTransactions = appState.allTransactions || appState.transactions || state.allTransactions || state.transactions || [];
+
+  state = {
+    ...state,
+    ...appState,
+    allAccounts,
+    allTransactions
+  };
+
   // Exclude friend money transactions from analytics
-  state.transactions = (appState.transactions || []).filter(tx => !tx.isFriendMoney);
+  state.transactions = allTransactions.filter(tx => !tx.isFriendMoney);
+  state.accounts = allAccounts;
   destroyAllCharts();
 
-  const { totalMoney } = calculateAccountBalances(state.accounts, state.transactions);
+  // Exact same current total-money calculation as Home screen (dashboard.js)
+  const { totalMoney } = calculateTotals(allAccounts, allTransactions);
   const accountDist = calculateAccountDistribution(state.accounts, state.transactions);
 
   const monthStr = `${selectedYear}-${String(selectedMonthIndex + 1).padStart(2, '0')}`;
