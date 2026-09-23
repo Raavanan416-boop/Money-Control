@@ -587,3 +587,40 @@
     padding-bottom: calc(40px + env(safe-area-inset-bottom));
   }
 }
+
+/* Biometric unlock button */
+.pin-btn-biometric {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 280px;
+  margin: 12px auto 0;
+  padding: 12px 20px;
+  background: rgba(108, 99, 255, 0.12);
+  color: var(--primary, #6C63FF);
+  border: 1px solid rgba(108, 99, 255, 0.3);
+  border-radius: 14px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Inter', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pin-btn-biometric:hover {
+  background: rgba(108, 99, 255, 0.22);
+  border-color: rgba(108, 99, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.pin-btn-biometric:active {
+  transform: translateY(0);
+}
+
+.pin-biometric-icon {
+  font-size: 1.25rem;
+}
+

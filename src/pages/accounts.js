@@ -33,6 +33,7 @@ export function renderAccountsPage(appState) {
 
   // Render Accounts List View
   const { balances, totalMoney } = calculateAccountBalances(accounts, transactions);
+  const hideBalance = state.hideBalance || false;
 
   return `
     <div class="page animate-fade-in">
@@ -46,8 +47,13 @@ export function renderAccountsPage(appState) {
 
       <!-- Total Money Banner -->
       <div class="card card-glass" style="margin-bottom: var(--space-6); background: var(--primary-bg); border-color: var(--primary-light);">
-        <div style="font-size: var(--fs-xs); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Total Money Across All Accounts</div>
-        <div style="font-size: var(--fs-3xl); font-weight: var(--fw-extrabold); color: var(--primary); margin-top: 4px;">${formatCurrency(totalMoney)}</div>
+        <div style="display:flex; align-items: center; justify-content: space-between;">
+          <div style="font-size: var(--fs-xs); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Total Money Across All Accounts</div>
+          ${hideBalance ? '<button id="btn-accounts-reveal-balance" style="background:none;border:none;cursor:pointer;font-size:1rem;opacity:0.7;" title="Temporarily reveal balances">🙈</button>' : ''}
+        </div>
+        <div id="accounts-total-balance" style="font-size: var(--fs-3xl); font-weight: var(--fw-extrabold); color: var(--primary); margin-top: 4px;" class="${hideBalance ? 'balance-hidden' : ''}">
+          ${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(totalMoney)}
+        </div>
       </div>
 
       <!-- Account Cards Grid -->
@@ -67,8 +73,9 @@ export function renderAccountsPage(appState) {
                   </div>
                 </div>
               </div>
-              <div style="font-size: var(--fs-2xl); font-weight: var(--fw-extrabold); color: ${bal < 0 ? 'var(--expense)' : 'var(--text-primary)'};">
-                ${formatCurrency(bal)}
+              <div class="acc-card-balance ${hideBalance ? 'balance-hidden' : ''}" style="font-size: var(--fs-2xl); font-weight: var(--fw-extrabold); color: ${bal < 0 ? 'var(--expense)' : 'var(--text-primary)'};"
+                   data-balance="${bal}">
+                ${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(bal)}
               </div>
               <div style="font-size: var(--fs-xs); color: var(--text-tertiary); margin-top: 4px;">
                 Initial: ${formatCurrency(acc.initialBalance || 0)}
@@ -86,6 +93,7 @@ export function renderAccountsPage(appState) {
  */
 function renderAccountDetailsScreen(account, transactions) {
   const stats = calculateAccountHistory(account, transactions, state.accounts);
+  const hideBalance = state.hideBalance || false;
 
   return `
     <div class="page animate-fade-in account-details-page">
@@ -112,11 +120,12 @@ function renderAccountDetailsScreen(account, transactions) {
         </h1>
         ${account.type ? `<div style="font-size: var(--fs-xs); color: var(--text-tertiary); margin-bottom: 12px;">${account.type} ${account.last4Digits ? `(••${account.last4Digits})` : ''}</div>` : ''}
         ${account.notes ? `<div style="font-size: var(--fs-xs); color: var(--text-secondary); margin-bottom: 12px; font-style: italic;">"${account.notes}"</div>` : ''}
-        <div style="font-size: var(--fs-xs); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">
+        <div style="font-size: var(--fs-xs); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
           Current Balance
+          ${hideBalance ? '<button id="btn-account-details-reveal-balance" style="background:none;border:none;cursor:pointer;font-size:1rem;opacity:0.7;" title="Temporarily reveal balance">🙈</button>' : ''}
         </div>
-        <div style="font-size: var(--fs-3xl); font-weight: 900; color: ${stats.balance < 0 ? 'var(--expense)' : 'var(--text-primary)'}; margin-top: 4px; letter-spacing: -0.02em;">
-          ${formatCurrency(stats.balance)}
+        <div id="account-details-balance" class="${hideBalance ? 'balance-hidden' : ''}" style="font-size: var(--fs-3xl); font-weight: 900; color: ${stats.balance < 0 ? 'var(--expense)' : 'var(--text-primary)'}; margin-top: 4px; letter-spacing: -0.02em;">
+          ${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(stats.balance)}
         </div>
       </div>
 
@@ -297,7 +306,79 @@ export function attachAccountsListeners(refreshData) {
       };
     }
 
+    // Temporary reveal balance button in Account Details view
+    const detailEyeBtn = document.getElementById('btn-account-details-reveal-balance');
+    if (detailEyeBtn) {
+      detailEyeBtn.onclick = () => {
+        const balEl = document.getElementById('account-details-balance');
+        if (!balEl) return;
+        const selectedAcc = state.accounts.find(a => a.id === state.selectedAccountId);
+        if (!selectedAcc) return;
+        const stats = calculateAccountHistory(selectedAcc, state.transactions, state.accounts);
+        if (balEl.classList.contains('balance-hidden')) {
+          balEl.classList.remove('balance-hidden');
+          balEl.textContent = formatCurrency(stats.balance);
+          detailEyeBtn.textContent = '👁️';
+          setTimeout(() => {
+            balEl.classList.add('balance-hidden');
+            balEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+            detailEyeBtn.textContent = '🙈';
+          }, 5000);
+        } else {
+          balEl.classList.add('balance-hidden');
+          balEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+          detailEyeBtn.textContent = '🙈';
+        }
+      };
+    }
+
     return;
+  }
+
+  // Temporary reveal balance button in Accounts list view
+  const revealBtn = document.getElementById('btn-accounts-reveal-balance');
+  if (revealBtn) {
+    revealBtn.onclick = () => {
+      const totalEl = document.getElementById('accounts-total-balance');
+      const cardBalances = document.querySelectorAll('.acc-card-balance');
+      const isCurrentlyHidden = totalEl?.classList.contains('balance-hidden');
+
+      if (isCurrentlyHidden) {
+        if (totalEl) {
+          const { totalMoney } = calculateAccountBalances(state.accounts, state.transactions);
+          totalEl.classList.remove('balance-hidden');
+          totalEl.textContent = formatCurrency(totalMoney);
+        }
+        cardBalances.forEach(el => {
+          el.classList.remove('balance-hidden');
+          const bal = Number(el.dataset.balance) || 0;
+          el.textContent = formatCurrency(bal);
+        });
+        revealBtn.textContent = '👁️';
+
+        setTimeout(() => {
+          if (totalEl) {
+            totalEl.classList.add('balance-hidden');
+            totalEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+          }
+          cardBalances.forEach(el => {
+            el.classList.add('balance-hidden');
+            el.innerHTML = '<span class="balance-mask">₹••••••</span>';
+          });
+          revealBtn.textContent = '🙈';
+        }, 5000);
+      } else {
+        if (totalEl) {
+          totalEl.classList.add('balance-hidden');
+          totalEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+        }
+        cardBalances.forEach(el => {
+          el.classList.add('balance-hidden');
+          el.innerHTML = '<span class="balance-mask">₹••••••</span>';
+        });
+        revealBtn.textContent = '🙈';
+      }
+    };
   }
 
   // Add Account button

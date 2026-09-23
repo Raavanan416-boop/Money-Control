@@ -50,6 +50,7 @@ export function renderAnalyticsPage(appState) {
   // Exact same current total-money calculation as Home screen (dashboard.js)
   const { totalMoney } = calculateTotals(allAccounts, allTransactions);
   const accountDist = calculateAccountDistribution(state.accounts, state.transactions);
+  const hideBalance = appState?.hideBalance || false;
 
   const monthStr = `${selectedYear}-${String(selectedMonthIndex + 1).padStart(2, '0')}`;
   const report = getMonthlyReport(state.transactions, monthStr);
@@ -64,7 +65,12 @@ export function renderAnalyticsPage(appState) {
 
       <!-- Account Distribution Chart Card -->
       <div class="chart-card" style="margin-bottom: var(--space-6);">
-        <h3 class="chart-title">Account Money Distribution (${formatCurrency(totalMoney)})</h3>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
+          <h3 class="chart-title" style="margin-bottom:0;">
+            Account Money Distribution (<span id="analytics-total-balance" class="${hideBalance ? 'balance-hidden' : ''}">${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(totalMoney)}</span>)
+          </h3>
+          ${hideBalance ? '<button class="balance-eye-btn" id="btn-analytics-reveal-balance" title="Temporarily reveal balance">🙈</button>' : ''}
+        </div>
         <div class="chart-container">
           <canvas id="accounts-distribution-chart"></canvas>
         </div>
@@ -80,7 +86,9 @@ export function renderAnalyticsPage(appState) {
                 </div>
               </div>
               <div>
-                <div class="category-amount">${formatCurrency(item.balance)}</div>
+                <div class="category-amount ${hideBalance ? 'balance-hidden' : ''}" data-balance="${item.balance}">
+                  ${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(item.balance)}
+                </div>
                 <div class="category-percentage">${item.percentage.toFixed(1)}%</div>
               </div>
             </div>
@@ -214,6 +222,54 @@ export function attachAnalyticsListeners() {
         selectedMonthIndex++;
       }
       refreshPage();
+    };
+  }
+
+  // Temporary reveal balance button
+  const revealBtn = document.getElementById('btn-analytics-reveal-balance');
+  if (revealBtn) {
+    revealBtn.onclick = () => {
+      const totalEl = document.getElementById('analytics-total-balance');
+      const catAmounts = document.querySelectorAll('.chart-card .category-amount');
+      const isCurrentlyHidden = totalEl?.classList.contains('balance-hidden');
+
+      if (isCurrentlyHidden) {
+        if (totalEl) {
+          const allAccounts = state.allAccounts || state.accounts || [];
+          const allTransactions = state.allTransactions || state.transactions || [];
+          const { totalMoney } = calculateTotals(allAccounts, allTransactions);
+          totalEl.classList.remove('balance-hidden');
+          totalEl.textContent = formatCurrency(totalMoney);
+        }
+        catAmounts.forEach(el => {
+          el.classList.remove('balance-hidden');
+          const bal = Number(el.dataset.balance) || 0;
+          el.textContent = formatCurrency(bal);
+        });
+        revealBtn.textContent = '👁️';
+
+        setTimeout(() => {
+          if (totalEl) {
+            totalEl.classList.add('balance-hidden');
+            totalEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+          }
+          catAmounts.forEach(el => {
+            el.classList.add('balance-hidden');
+            el.innerHTML = '<span class="balance-mask">₹••••••</span>';
+          });
+          revealBtn.textContent = '🙈';
+        }, 5000);
+      } else {
+        if (totalEl) {
+          totalEl.classList.add('balance-hidden');
+          totalEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+        }
+        catAmounts.forEach(el => {
+          el.classList.add('balance-hidden');
+          el.innerHTML = '<span class="balance-mask">₹••••••</span>';
+        });
+        revealBtn.textContent = '🙈';
+      }
     };
   }
 

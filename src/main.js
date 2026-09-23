@@ -60,7 +60,12 @@ const appState = {
   pinEnabled: false,
   pinHash: null,
   autoLockTimeout: 5, // minutes
-  lastActivityTime: Date.now()
+  lastActivityTime: Date.now(),
+  // V3 Biometric state
+  biometricEnabled: false,
+  biometricCredentialId: null,
+  // V3 Privacy
+  hideBalance: false
 };
 
 window.appState = appState;
@@ -243,6 +248,9 @@ async function loadUserData(uid) {
     appState.pinEnabled = pinData.pinEnabled;
     appState.pinHash = pinData.pinHash;
     appState.autoLockTimeout = pinData.autoLockTimeout !== undefined ? pinData.autoLockTimeout : 5;
+    appState.biometricEnabled = pinData.biometricEnabled || false;
+    appState.biometricCredentialId = pinData.biometricCredentialId || null;
+    appState.hideBalance = pinData.hideBalance || false;
 
     // Subscribe to Accounts in real-time
     appState.unsubscribeAccounts = subscribeToAccounts(uid, (accounts, error) => {
@@ -290,7 +298,7 @@ async function loadUserData(uid) {
         appState.lastActivityTime = Date.now();
         startAutoLockTimer();
         renderAppLayout();
-      });
+      }, appState.biometricEnabled, appState.biometricCredentialId);
     } else if (!pinData.pinSetupPromptShown) {
       // First time — show PIN setup prompt
       showPinSetupPrompt(uid, () => {
@@ -409,6 +417,9 @@ function attachCurrentPageListeners(page) {
       appState.pinEnabled = pinData.pinEnabled;
       appState.pinHash = pinData.pinHash;
       appState.autoLockTimeout = pinData.autoLockTimeout !== undefined ? pinData.autoLockTimeout : 5;
+      appState.biometricEnabled = pinData.biometricEnabled || false;
+      appState.biometricCredentialId = pinData.biometricCredentialId || null;
+      appState.hideBalance = pinData.hideBalance || false;
 
       renderAppLayout();
     }
@@ -484,7 +495,7 @@ function lockApp() {
     appState.lastActivityTime = Date.now();
     startAutoLockTimer();
     renderAppLayout();
-  });
+  }, appState.biometricEnabled, appState.biometricCredentialId);
 }
 
 /**

@@ -10,7 +10,9 @@ import {
   verifyPin,
   removePin,
   markPinPromptShown,
-  PIN_LENGTH
+  PIN_LENGTH,
+  verifyBiometric,
+  isBiometricSupported
 } from '../services/pin.js';
 import { toast } from '../utils/toast.js';
 
@@ -26,7 +28,9 @@ let pinState = {
   uid: null,
   storedHash: null,
   onUnlock: null,
-  onSetupComplete: null
+  onSetupComplete: null,
+  biometricEnabled: false,
+  biometricCredentialId: null
 };
 
 let keydownListenerAttached = false;
@@ -75,7 +79,7 @@ export function showChangePinScreen(uid, storedHash, onSetupComplete) {
 /**
  * Show the PIN lock screen
  */
-export function showPinLockScreen(uid, storedHash, onUnlock) {
+export function showPinLockScreen(uid, storedHash, onUnlock, biometricEnabled, biometricCredentialId) {
   pinState.mode = 'lock';
   pinState.uid = uid;
   pinState.storedHash = storedHash;
@@ -83,7 +87,14 @@ export function showPinLockScreen(uid, storedHash, onUnlock) {
   pinState.failedAttempts = 0;
   pinState.isProcessing = false;
   pinState.onUnlock = onUnlock;
+  pinState.biometricEnabled = biometricEnabled || false;
+  pinState.biometricCredentialId = biometricCredentialId || null;
   renderPinOverlay();
+
+  // Auto-trigger biometric if enabled
+  if (biometricEnabled && biometricCredentialId) {
+    setTimeout(() => triggerBiometricAuth(), 500);
+  }
 }
 
 /**
@@ -268,6 +279,13 @@ function renderLockScreenHTML() {
         🔓 Unlock
       </button>
 
+      ${pinState.biometricEnabled && pinState.biometricCredentialId ? `
+        <button class="pin-btn pin-btn-biometric" id="pin-biometric-btn" title="Use fingerprint or face unlock">
+          <span class="pin-biometric-icon">🪪</span>
+          Use Fingerprint / Biometric
+        </button>
+      ` : ''}
+
       <div class="pin-footer-actions">
         <button class="pin-btn pin-btn-ghost pin-btn-sm" id="pin-forgot-btn">
           Forgot PIN?
@@ -441,6 +459,12 @@ function attachPinListeners() {
   const unlockBtn = document.getElementById('pin-unlock-btn');
   if (unlockBtn) {
     unlockBtn.onclick = () => handleUnlock();
+  }
+
+  // Biometric button
+  const biometricBtn = document.getElementById('pin-biometric-btn');
+  if (biometricBtn) {
+    biometricBtn.onclick = () => triggerBiometricAuth();
   }
 
   // Forgot PIN button
@@ -765,6 +789,56 @@ async function handleForgotPinVerify() {
     if (verifyBtn) {
       verifyBtn.disabled = false;
       verifyBtn.textContent = 'Verify & Reset PIN';
+    }
+  }
+}
+
+/**
+ * Trigger biometric authentication (WebAuthn)
+ * On success: unlock the app
+ * On failure: show error, fall back to PIN entry
+ */
+async function triggerBiometricAuth() {
+  if (!pinState.biometricCredentialId || pinState.isProcessing) return;
+
+  const errorEl = document.getElementById('pin-lock-error');
+  const bioBtn = document.getElementById('pin-biometric-btn');
+
+  if (errorEl) errorEl.textContent = '';
+  if (bioBtn) {
+    bioBtn.disabled = true;
+    bioBtn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Verifying...';
+  }
+
+  try {
+    const success = await verifyBiometric(pinState.uid, pinState.biometricCredentialId);
+
+    if (success) {
+      toast.success('✅ Biometric unlock successful!');
+      hidePinOverlay();
+      pinState.pin = '';
+      pinState.failedAttempts = 0;
+      pinState.isProcessing = false;
+      if (pinState.onUnlock) pinState.onUnlock();
+    } else {
+      if (errorEl) errorEl.textContent = 'Biometric authentication failed. Please use your PIN.';
+      if (bioBtn) {
+        bioBtn.disabled = false;
+        bioBtn.innerHTML = '<span class="pin-biometric-icon">🪪</span> Use Fingerprint / Biometric';
+      }
+    }
+  } catch (err) {
+    console.warn('Biometric error:', err);
+    let msg = 'Biometric authentication failed. Please use your PIN.';
+    if (err.name === 'NotAllowedError') {
+      msg = 'Biometric was cancelled. Enter your PIN to continue.';
+    } else if (err.name === 'SecurityError') {
+      msg = 'Biometric not available in this context. Use your PIN.';
+    }
+    if (errorEl) errorEl.textContent = msg;
+    if (bioBtn) {
+      bioBtn.disabled = false;
+      bioBtn.innerHTML = '<span class="pin-biometric-icon">🪪</span> Use Fingerprint / Biometric';
     }
   }
 }

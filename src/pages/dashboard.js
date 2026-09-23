@@ -62,6 +62,7 @@ export function renderDashboardPage(state) {
 
   const userName = profile?.name ? profile.name.split(' ')[0] : 'User';
   const { balances, totalMoney } = calculateTotals(accounts, transactions);
+  const hideBalance = dashboardState.hideBalance || false;
 
   // Today's activity — calendar-day based (local timezone), NOT rolling 24 hours
   const today = getTodayDate();
@@ -97,8 +98,15 @@ export function renderDashboardPage(state) {
 
       <!-- 2. Total Money card -->
       <div class="balance-card balance-card-interactive" id="dashboard-total-money-card" tabindex="0" role="button" aria-label="View Total Money History">
-        <div class="balance-label">💰 TOTAL MONEY</div>
-        <div class="balance-amount">${formatCurrency(totalMoney)}</div>
+        <div class="balance-label">
+          💰 TOTAL MONEY
+          <button class="balance-eye-btn" id="btn-toggle-balance-visibility" title="${hideBalance ? 'Show balance' : 'Hide balance'}" style="margin-left: 8px; background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.7; vertical-align: middle;">
+            ${hideBalance ? '🙈' : '👁️'}
+          </button>
+        </div>
+        <div class="balance-amount ${hideBalance ? 'balance-hidden' : ''}" id="dashboard-total-balance">
+          ${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(totalMoney)}
+        </div>
         <div class="balance-subtitle">Across ${accounts.length} account${accounts.length === 1 ? '' : 's'}</div>
       </div>
 
@@ -118,7 +126,9 @@ export function renderDashboardPage(state) {
                   <span class="account-row-icon">${acc.icon || '🏦'}</span>
                   <span class="account-row-name">${acc.name}</span>
                 </div>
-                <div class="account-row-balance">${formatCurrency(bal)}</div>
+                <div class="account-row-balance ${hideBalance ? 'balance-hidden' : ''}">
+                  ${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(bal)}
+                </div>
               </div>
             `;
           }).join('') : `
@@ -218,6 +228,66 @@ export function attachDashboardListeners(navigateFn, refreshData) {
       retryBtn.disabled = true;
       retryBtn.innerHTML = `<span class="spinner"></span> Loading...`;
       if (refreshData) refreshData();
+    };
+  }
+
+  // Eye button — toggle balance visibility (temporary reveal, does not change setting)
+  const eyeBtn = document.getElementById('btn-toggle-balance-visibility');
+  if (eyeBtn) {
+    let hideTimeout = null;
+    eyeBtn.onclick = (e) => {
+      e.stopPropagation(); // Don't navigate to history page
+      const balanceEl = document.getElementById('dashboard-total-balance');
+      const isHidden = balanceEl?.classList.contains('balance-hidden');
+
+      if (isHidden) {
+        // Temporarily reveal
+        const { totalMoney, balances } = calculateTotals(dashboardState.accounts, dashboardState.transactions);
+        if (balanceEl) {
+          balanceEl.classList.remove('balance-hidden');
+          balanceEl.textContent = formatCurrency(totalMoney);
+        }
+        eyeBtn.textContent = '👁️';
+        eyeBtn.title = 'Hide balance';
+        // Reveal account balances
+        document.querySelectorAll('.account-row-balance').forEach(el => {
+          el.classList.remove('balance-hidden');
+          const accId = el.closest('[data-account-id]')?.dataset.accountId;
+          if (accId) {
+            const bal = balances[accId] || 0;
+            el.textContent = formatCurrency(bal);
+          }
+        });
+        // Auto-hide after 5 seconds if persistent setting is hide
+        if (dashboardState.hideBalance) {
+          clearTimeout(hideTimeout);
+          hideTimeout = setTimeout(() => {
+            if (balanceEl) {
+              balanceEl.classList.add('balance-hidden');
+              balanceEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+            }
+            eyeBtn.textContent = '🙈';
+            eyeBtn.title = 'Show balance';
+            document.querySelectorAll('.account-row-balance').forEach(el => {
+              el.classList.add('balance-hidden');
+              el.innerHTML = '<span class="balance-mask">₹••••••</span>';
+            });
+          }, 5000);
+        }
+      } else {
+        // Re-hide
+        clearTimeout(hideTimeout);
+        if (balanceEl) {
+          balanceEl.classList.add('balance-hidden');
+          balanceEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+        }
+        eyeBtn.textContent = '🙈';
+        eyeBtn.title = 'Show balance';
+        document.querySelectorAll('.account-row-balance').forEach(el => {
+          el.classList.add('balance-hidden');
+          el.innerHTML = '<span class="balance-mask">₹••••••</span>';
+        });
+      }
     };
   }
 

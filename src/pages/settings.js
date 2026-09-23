@@ -4,19 +4,30 @@
 
 import { logout, deleteAccount } from '../services/auth.js';
 import { updateUserSettings, setInitialBalance } from '../services/firestore.js';
-import { exportToCSV, exportMonthlyReport } from '../services/export.js';
+import { exportToCSV, exportToExcel, exportToPDF, exportMonthlyReport } from '../services/export.js';
+import { createBackup, parseBackupFile, validateBackup, restoreBackup } from '../services/backup.js';
 import { openModal, closeModal, showConfirm } from '../components/modal.js';
 import { formatCurrency } from '../utils/formatters.js';
 import { validateAmount } from '../utils/validators.js';
 import { toast } from '../utils/toast.js';
-import { getPinData, saveAutoLockTimeout, removePin } from '../services/pin.js';
+import {
+  getPinData,
+  saveAutoLockTimeout,
+  removePin,
+  isBiometricSupported,
+  registerBiometric,
+  disableBiometric,
+  saveHideBalance
+} from '../services/pin.js';
 import { showCreatePinScreen, showChangePinScreen } from '../pages/pinlock.js';
 import { canInstallPWA, triggerInstallPrompt, isPWAInstalled } from '../services/pwa.js';
 
 let state = {
   user: null,
   profile: null,
-  transactions: []
+  transactions: [],
+  accounts: [],
+  friendMoneyRecords: []
 };
 
 /**
@@ -33,6 +44,8 @@ export function renderSettingsPage(appState) {
   // PIN state
   const pinEnabled = profile?.pinEnabled || false;
   const autoLockTimeout = profile?.autoLockTimeout !== undefined ? profile.autoLockTimeout : 5;
+  const biometricEnabled = appState?.biometricEnabled || false;
+  const hideBalance = appState?.hideBalance || false;
 
   // PWA state
   const canInstall = canInstallPWA();
@@ -64,7 +77,7 @@ export function renderSettingsPage(appState) {
           </div>
 
           ${pinEnabled ? `
-            <div class="settings-item" id="btn-change-pin">
+            <div class="settings-item" id="btn-change-pin" style="cursor:pointer;">
               <div class="settings-item-left">
                 <div class="settings-item-icon">🔑</div>
                 <div>
@@ -73,6 +86,20 @@ export function renderSettingsPage(appState) {
                 </div>
               </div>
               <div class="settings-item-right">❯</div>
+            </div>
+
+            <div class="settings-item" id="settings-biometric-row">
+              <div class="settings-item-left">
+                <div class="settings-item-icon">🪪</div>
+                <div>
+                  <div class="settings-item-text">Fingerprint / Biometric</div>
+                  <div class="settings-item-subtitle" id="biometric-subtitle">${biometricEnabled ? 'Biometric unlock is enabled' : 'Use fingerprint or face unlock'}</div>
+                </div>
+              </div>
+              <label class="toggle" id="biometric-toggle-wrapper">
+                <input type="checkbox" id="toggle-biometric" ${biometricEnabled ? 'checked' : ''} />
+                <span class="toggle-slider"></span>
+              </label>
             </div>
 
             <div class="settings-item">
@@ -103,6 +130,21 @@ export function renderSettingsPage(appState) {
               <div class="settings-item-right">❯</div>
             </div>
           ` : ''}
+
+          <!-- Hide Balance — always visible (no PIN required) -->
+          <div class="settings-item">
+            <div class="settings-item-left">
+              <div class="settings-item-icon">👁️</div>
+              <div>
+                <div class="settings-item-text">Hide Balance</div>
+                <div class="settings-item-subtitle">Show ₹•••••• instead of actual balance</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="toggle-hide-balance" ${hideBalance ? 'checked' : ''} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -204,24 +246,47 @@ export function renderSettingsPage(appState) {
         </div>
       </div>
 
-      <!-- Data Export Section -->
+      <!-- Export & Backup Section -->
       <div class="settings-section">
-        <div class="settings-section-title">Data & Export</div>
+        <div class="settings-section-title">📤 Export & Backup</div>
         <div class="settings-group">
-          <div class="settings-item" id="btn-export-csv">
+
+          <div class="settings-item" id="btn-export-csv" style="cursor:pointer;">
             <div class="settings-item-left">
-              <div class="settings-item-icon">📊</div>
+              <div class="settings-item-icon">📄</div>
               <div>
-                <div class="settings-item-text">Export Transactions (CSV)</div>
+                <div class="settings-item-text">Export as CSV</div>
                 <div class="settings-item-subtitle">Download all transactions as a CSV spreadsheet</div>
               </div>
             </div>
             <div class="settings-item-right">📥</div>
           </div>
 
-          <div class="settings-item" id="btn-export-report">
+          <div class="settings-item" id="btn-export-excel" style="cursor:pointer;">
+            <div class="settings-item-left">
+              <div class="settings-item-icon">📊</div>
+              <div>
+                <div class="settings-item-text">Export as Excel</div>
+                <div class="settings-item-subtitle">Download .xlsx with Transactions, Accounts, Friends Money & Summary sheets</div>
+              </div>
+            </div>
+            <div class="settings-item-right">📥</div>
+          </div>
+
+          <div class="settings-item" id="btn-export-pdf" style="cursor:pointer;">
             <div class="settings-item-left">
               <div class="settings-item-icon">📑</div>
+              <div>
+                <div class="settings-item-text">Export as PDF</div>
+                <div class="settings-item-subtitle">Download professional monthly report as PDF</div>
+              </div>
+            </div>
+            <div class="settings-item-right">📥</div>
+          </div>
+
+          <div class="settings-item" id="btn-export-report" style="cursor:pointer;">
+            <div class="settings-item-left">
+              <div class="settings-item-icon">🖨️</div>
               <div>
                 <div class="settings-item-text">Print Monthly Report</div>
                 <div class="settings-item-subtitle">Generate printable HTML report for the current month</div>
@@ -229,6 +294,33 @@ export function renderSettingsPage(appState) {
             </div>
             <div class="settings-item-right">🖨️</div>
           </div>
+
+          <div class="settings-divider" style="height:1px;background:var(--border-color);margin:4px 0;"></div>
+
+          <div class="settings-item" id="btn-create-backup" style="cursor:pointer;">
+            <div class="settings-item-left">
+              <div class="settings-item-icon">💾</div>
+              <div>
+                <div class="settings-item-text">Create Backup</div>
+                <div class="settings-item-subtitle">Download a backup file of all your financial data</div>
+              </div>
+            </div>
+            <div class="settings-item-right">📤</div>
+          </div>
+
+          <div class="settings-item" id="btn-restore-backup" style="cursor:pointer;">
+            <div class="settings-item-left">
+              <div class="settings-item-icon">📥</div>
+              <div>
+                <div class="settings-item-text">Restore Backup</div>
+                <div class="settings-item-subtitle">Restore data from a backup file</div>
+              </div>
+            </div>
+            <div class="settings-item-right">⚠️ ❯</div>
+          </div>
+
+          <!-- Hidden file input for backup restore -->
+          <input type="file" id="restore-backup-file-input" accept=".json" style="display:none;" />
         </div>
       </div>
 
@@ -273,14 +365,11 @@ export function attachSettingsListeners(onLogout, refreshData) {
     pinToggle.onchange = async (e) => {
       const enable = e.target.checked;
       if (enable) {
-        // Show Create PIN screen
         showCreatePinScreen(state.user.uid, () => {
           if (refreshData) refreshData();
         });
-        // Revert toggle until PIN is actually set
         e.target.checked = false;
       } else {
-        // Disable PIN — confirm first
         const confirmed = await showConfirm({
           icon: '🔓',
           title: 'Disable PIN Lock',
@@ -315,6 +404,72 @@ export function attachSettingsListeners(onLogout, refreshData) {
     };
   }
 
+  // ===== Biometric Toggle =====
+  const biometricToggle = document.getElementById('toggle-biometric');
+  const biometricSubtitle = document.getElementById('biometric-subtitle');
+  const biometricWrapper = document.getElementById('biometric-toggle-wrapper');
+
+  if (biometricToggle) {
+    // Proactively check device support and update subtitle if unavailable
+    isBiometricSupported().then(supported => {
+      if (!supported) {
+        biometricToggle.disabled = true;
+        if (biometricSubtitle) biometricSubtitle.textContent = 'Biometric authentication is not available on this device.';
+        if (biometricWrapper) biometricWrapper.style.opacity = '0.5';
+      }
+    }).catch(() => {});
+
+    biometricToggle.onchange = async (e) => {
+      const enable = e.target.checked;
+
+      if (enable) {
+        // Check support first
+        const supported = await isBiometricSupported();
+        if (!supported) {
+          toast.error('Biometric authentication is not available on this device.');
+          e.target.checked = false;
+          const subtitle = document.getElementById('biometric-subtitle');
+          if (subtitle) subtitle.textContent = 'Biometric authentication is not available on this device.';
+          return;
+        }
+
+        try {
+          const userName = state.profile?.name || state.user?.email || 'User';
+          await registerBiometric(state.user.uid, userName);
+          toast.success('🪪 Biometric unlock enabled!');
+          if (refreshData) refreshData();
+        } catch (err) {
+          console.error('Biometric registration error:', err);
+          let msg = 'Failed to enable biometric authentication.';
+          if (err.name === 'NotAllowedError') msg = 'Biometric permission denied. Please allow access in your device settings.';
+          else if (err.name === 'SecurityError') msg = 'Biometric requires HTTPS or localhost.';
+          toast.error(msg);
+          e.target.checked = false;
+        }
+      } else {
+        const confirmed = await showConfirm({
+          icon: '🪪',
+          title: 'Disable Biometric',
+          message: 'Disable fingerprint/biometric unlock? You can re-enable it anytime. PIN will remain your unlock method.',
+          confirmText: 'Disable Biometric',
+          danger: false
+        });
+        if (confirmed) {
+          try {
+            await disableBiometric(state.user.uid);
+            toast.success('Biometric unlock disabled.');
+            if (refreshData) refreshData();
+          } catch (err) {
+            toast.error('Unable to disable biometric.');
+            e.target.checked = true;
+          }
+        } else {
+          e.target.checked = true;
+        }
+      }
+    };
+  }
+
   // ===== Auto Lock Selection =====
   const autoLockSelect = document.getElementById('select-auto-lock');
   if (autoLockSelect) {
@@ -335,6 +490,24 @@ export function attachSettingsListeners(onLogout, refreshData) {
   if (lockNowBtn) {
     lockNowBtn.onclick = () => {
       window.dispatchEvent(new CustomEvent('lock-app'));
+    };
+  }
+
+  // ===== Hide Balance Toggle =====
+  const hideBalanceToggle = document.getElementById('toggle-hide-balance');
+  if (hideBalanceToggle) {
+    hideBalanceToggle.onchange = async (e) => {
+      const hide = e.target.checked;
+      try {
+        await saveHideBalance(state.user.uid, hide);
+        // Update appState immediately
+        if (window.appState) window.appState.hideBalance = hide;
+        toast.success(hide ? '👁️ Balances hidden.' : '👁️ Balances visible.');
+        if (refreshData) refreshData();
+      } catch (err) {
+        toast.error('Unable to update hide balance setting.');
+        e.target.checked = !hide;
+      }
     };
   }
 
@@ -446,20 +619,69 @@ export function attachSettingsListeners(onLogout, refreshData) {
     };
   }
 
-  // Export CSV
+  // ===== Export CSV =====
   const exportCsvBtn = document.getElementById('btn-export-csv');
   if (exportCsvBtn) {
     exportCsvBtn.onclick = () => {
       try {
         exportToCSV(state.transactions, state.accounts);
-        toast.success('📊 Transactions exported to CSV!');
+        toast.success('📄 Transactions exported to CSV!');
       } catch (err) {
         toast.error(err.message || 'Unable to export transactions.');
       }
     };
   }
 
-  // Export Monthly Report
+  // ===== Export Excel =====
+  const exportExcelBtn = document.getElementById('btn-export-excel');
+  if (exportExcelBtn) {
+    exportExcelBtn.onclick = async () => {
+      if (!state.transactions || state.transactions.length === 0) {
+        toast.error('No transactions to export.');
+        return;
+      }
+      try {
+        exportExcelBtn.style.opacity = '0.6';
+        exportExcelBtn.style.pointerEvents = 'none';
+        await exportToExcel(state.transactions, state.accounts, state.friendMoneyRecords);
+        toast.success('📊 Exported to Excel successfully!');
+      } catch (err) {
+        console.error('Excel export error:', err);
+        toast.error('Unable to export to Excel.');
+      } finally {
+        exportExcelBtn.style.opacity = '';
+        exportExcelBtn.style.pointerEvents = '';
+      }
+    };
+  }
+
+  // ===== Export PDF =====
+  const exportPdfBtn = document.getElementById('btn-export-pdf');
+  if (exportPdfBtn) {
+    exportPdfBtn.onclick = async () => {
+      try {
+        exportPdfBtn.style.opacity = '0.6';
+        exportPdfBtn.style.pointerEvents = 'none';
+        const now = new Date();
+        await exportToPDF(
+          state.transactions,
+          state.accounts,
+          state.friendMoneyRecords,
+          now.getMonth(),
+          now.getFullYear()
+        );
+        toast.success('📑 PDF report downloaded!');
+      } catch (err) {
+        console.error('PDF export error:', err);
+        toast.error('Unable to generate PDF report.');
+      } finally {
+        exportPdfBtn.style.opacity = '';
+        exportPdfBtn.style.pointerEvents = '';
+      }
+    };
+  }
+
+  // ===== Print Monthly Report (HTML) =====
   const exportReportBtn = document.getElementById('btn-export-report');
   if (exportReportBtn) {
     exportReportBtn.onclick = () => {
@@ -475,6 +697,126 @@ export function attachSettingsListeners(onLogout, refreshData) {
       } catch (err) {
         toast.error('Unable to generate report.');
       }
+    };
+  }
+
+  // ===== Create Backup =====
+  const createBackupBtn = document.getElementById('btn-create-backup');
+  if (createBackupBtn) {
+    createBackupBtn.onclick = async () => {
+      try {
+        createBackupBtn.style.opacity = '0.6';
+        createBackupBtn.style.pointerEvents = 'none';
+        const result = createBackup(
+          state.user.uid,
+          state.accounts,
+          state.transactions,
+          state.friendMoneyRecords,
+          state.profile
+        );
+        toast.success(`💾 Backup created! (${result.recordCounts.transactions} transactions, ${result.recordCounts.accounts} accounts)`);
+      } catch (err) {
+        console.error('Backup error:', err);
+        toast.error(err.message || 'Unable to create backup.');
+      } finally {
+        createBackupBtn.style.opacity = '';
+        createBackupBtn.style.pointerEvents = '';
+      }
+    };
+  }
+
+  // ===== Restore Backup =====
+  const restoreBackupBtn = document.getElementById('btn-restore-backup');
+  const fileInput = document.getElementById('restore-backup-file-input');
+
+  if (restoreBackupBtn && fileInput) {
+    restoreBackupBtn.onclick = () => {
+      fileInput.value = '';
+      fileInput.click();
+    };
+
+    fileInput.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      let backupData;
+      try {
+        backupData = await parseBackupFile(file);
+      } catch (err) {
+        toast.error(err.message || 'Could not read backup file.');
+        return;
+      }
+
+      const validation = validateBackup(backupData);
+      if (!validation.valid) {
+        toast.error(validation.error || 'Invalid backup file.');
+        return;
+      }
+
+      // Show confirmation modal with backup info
+      const content = `
+        <div class="alert-banner alert-banner-danger" style="margin-bottom: 16px;">
+          <span class="alert-banner-icon">⚠️</span>
+          <div class="alert-banner-text">
+            <strong>This will REPLACE all your current data</strong> with the backup contents. This cannot be undone.
+          </div>
+        </div>
+
+        <div style="background: var(--bg-tertiary); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+          <div style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Backup Details</div>
+          <div style="display: grid; gap: 8px;">
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">Exported on</span>
+              <span style="font-weight: 600;">${validation.exportedAt || 'Unknown'}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">Accounts</span>
+              <span style="font-weight: 600;">${validation.recordCounts.accounts}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">Transactions</span>
+              <span style="font-weight: 600;">${validation.recordCounts.transactions}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-secondary);">Friend Money Records</span>
+              <span style="font-weight: 600;">${validation.recordCounts.friendMoney}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button class="btn btn-danger btn-block" id="btn-confirm-restore">⚠️ Restore Backup Now</button>
+          <button class="btn btn-secondary btn-block" id="btn-cancel-restore">Cancel</button>
+        </div>
+      `;
+
+      openModal({
+        title: '📥 Restore Backup',
+        content,
+        onOpen: (modal) => {
+          modal.querySelector('#btn-cancel-restore').onclick = () => closeModal();
+
+          modal.querySelector('#btn-confirm-restore').onclick = async () => {
+            const confirmBtn = modal.querySelector('#btn-confirm-restore');
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<span class="spinner"></span> Restoring...';
+
+            try {
+              await restoreBackup(state.user.uid, backupData, (msg) => {
+                confirmBtn.innerHTML = `<span class="spinner"></span> ${msg}`;
+              });
+              closeModal();
+              toast.success('✅ Backup restored successfully! Reloading data...');
+              if (refreshData) setTimeout(() => refreshData(), 500);
+            } catch (err) {
+              console.error('Restore error:', err);
+              toast.error(err.message || 'Restore failed. Please try again.');
+              confirmBtn.disabled = false;
+              confirmBtn.innerHTML = '⚠️ Restore Backup Now';
+            }
+          };
+        }
+      });
     };
   }
 

@@ -22,6 +22,7 @@ let historyPageState = {
 export function renderTotalMoneyHistoryPage(state) {
   historyPageState = { ...historyPageState, ...state };
   const { accounts, transactions } = historyPageState;
+  const hideBalance = state?.hideBalance || window.appState?.hideBalance || false;
 
   const { startingTotal, currentTotal, history } = calculateTotalMoneyHistory(accounts, transactions);
 
@@ -37,8 +38,13 @@ export function renderTotalMoneyHistoryPage(state) {
 
       <!-- 2. Current Total Hero Card -->
       <div class="balance-card tmh-hero-card">
-        <div class="balance-label">💰 TOTAL MONEY HISTORY</div>
-        <div class="balance-amount">${formatCurrency(currentTotal)}</div>
+        <div class="balance-label">
+          💰 TOTAL MONEY HISTORY
+          ${hideBalance ? '<button class="balance-eye-btn" id="btn-tmh-reveal-balance" title="Temporarily reveal balance">🙈</button>' : ''}
+        </div>
+        <div id="tmh-current-total" class="balance-amount ${hideBalance ? 'balance-hidden' : ''}">
+          ${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(currentTotal)}
+        </div>
         <div class="balance-subtitle">Current Total • Across ${accounts.length} account${accounts.length === 1 ? '' : 's'}</div>
       </div>
 
@@ -163,6 +169,38 @@ export function attachTotalMoneyHistoryListeners(navigateFn) {
   if (backBtn) {
     backBtn.onclick = () => {
       navigateFn('dashboard');
+    };
+  }
+
+  // Temporary reveal balance button
+  const revealBtn = document.getElementById('btn-tmh-reveal-balance');
+  if (revealBtn) {
+    revealBtn.onclick = () => {
+      const totalEl = document.getElementById('tmh-current-total');
+      const isCurrentlyHidden = totalEl?.classList.contains('balance-hidden');
+
+      if (isCurrentlyHidden) {
+        if (totalEl) {
+          const { currentTotal } = calculateTotalMoneyHistory(historyPageState.accounts, historyPageState.transactions);
+          totalEl.classList.remove('balance-hidden');
+          totalEl.textContent = formatCurrency(currentTotal);
+        }
+        revealBtn.textContent = '👁️';
+
+        setTimeout(() => {
+          if (totalEl) {
+            totalEl.classList.add('balance-hidden');
+            totalEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+          }
+          revealBtn.textContent = '🙈';
+        }, 5000);
+      } else {
+        if (totalEl) {
+          totalEl.classList.add('balance-hidden');
+          totalEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+        }
+        revealBtn.textContent = '🙈';
+      }
     };
   }
 

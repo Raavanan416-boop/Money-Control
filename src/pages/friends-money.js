@@ -85,6 +85,7 @@ export function renderFriendsMoneyPage(state) {
 
   // Filter & search
   const filtered = filterRecords(records, activeFilter, searchQuery);
+  const hideBalance = state?.hideBalance || window.appState?.hideBalance || false;
 
   return `
     <div class="page animate-fade-in friends-money-page">
@@ -97,13 +98,20 @@ export function renderFriendsMoneyPage(state) {
       <div class="fm-summary-grid">
         <div class="fm-summary-card gave">
           <div class="fm-summary-icon">💚</div>
-          <div class="fm-summary-label">They Owe Me</div>
-          <div class="fm-summary-amount">${formatCurrency(summary.theyOweMe)}</div>
+          <div class="fm-summary-label">
+            They Owe Me
+            ${hideBalance ? '<button class="balance-eye-btn" id="btn-fm-reveal-balance" title="Temporarily reveal balance">🙈</button>' : ''}
+          </div>
+          <div class="fm-summary-amount ${hideBalance ? 'balance-hidden' : ''}" id="fm-summary-they-owe" data-amount="${summary.theyOweMe}">
+            ${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(summary.theyOweMe)}
+          </div>
         </div>
         <div class="fm-summary-card borrowed">
           <div class="fm-summary-icon">💜</div>
           <div class="fm-summary-label">I Owe</div>
-          <div class="fm-summary-amount">${formatCurrency(summary.iOwe)}</div>
+          <div class="fm-summary-amount ${hideBalance ? 'balance-hidden' : ''}" id="fm-summary-i-owe" data-amount="${summary.iOwe}">
+            ${hideBalance ? '<span class="balance-mask">₹••••••</span>' : formatCurrency(summary.iOwe)}
+          </div>
         </div>
       </div>
 
@@ -539,6 +547,50 @@ export function attachFriendsMoneyListeners(refreshFn) {
   const addBtn = document.getElementById('fm-add-btn');
   if (addBtn) {
     addBtn.onclick = () => openAddFriendMoneyModal(refreshFn);
+  }
+
+  // Temporary reveal balance button
+  const revealBtn = document.getElementById('btn-fm-reveal-balance');
+  if (revealBtn) {
+    revealBtn.onclick = () => {
+      const theyOweEl = document.getElementById('fm-summary-they-owe');
+      const iOweEl = document.getElementById('fm-summary-i-owe');
+      const isCurrentlyHidden = theyOweEl?.classList.contains('balance-hidden');
+
+      if (isCurrentlyHidden) {
+        if (theyOweEl) {
+          theyOweEl.classList.remove('balance-hidden');
+          theyOweEl.textContent = formatCurrency(Number(theyOweEl.dataset.amount) || 0);
+        }
+        if (iOweEl) {
+          iOweEl.classList.remove('balance-hidden');
+          iOweEl.textContent = formatCurrency(Number(iOweEl.dataset.amount) || 0);
+        }
+        revealBtn.textContent = '👁️';
+
+        setTimeout(() => {
+          if (theyOweEl) {
+            theyOweEl.classList.add('balance-hidden');
+            theyOweEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+          }
+          if (iOweEl) {
+            iOweEl.classList.add('balance-hidden');
+            iOweEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+          }
+          revealBtn.textContent = '🙈';
+        }, 5000);
+      } else {
+        if (theyOweEl) {
+          theyOweEl.classList.add('balance-hidden');
+          theyOweEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+        }
+        if (iOweEl) {
+          iOweEl.classList.add('balance-hidden');
+          iOweEl.innerHTML = '<span class="balance-mask">₹••••••</span>';
+        }
+        revealBtn.textContent = '🙈';
+      }
+    };
   }
 
   // Search
