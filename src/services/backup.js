@@ -204,30 +204,39 @@ export async function restoreBackup(uid, backupData, onProgress) {
   const progress = (msg) => { if (onProgress) onProgress(msg); };
 
   const database = firestoreDb();
+  const globalSessionRef = doc(database, 'users', uid, 'deleteSessions', 'global');
 
-  // Helper to delete collection in chunks of 400 (under Firestore limit of 500)
-  async function deleteCollectionInBatches(collRef) {
-    const snap = await getDocs(collRef);
-    const docs = snap.docs;
-    const chunks = chunkArray(docs, 400);
-    for (const chunk of chunks) {
-      const batch = writeBatch(database);
-      chunk.forEach(d => batch.delete(d.ref));
-      await batch.commit();
+  try {
+    // Authorize bulk restore deletions under Firestore security rules
+    await setDoc(globalSessionRef, {
+      verified: true,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 5 * 60 * 1000
+    });
+
+    // Helper to delete collection in chunks of 400 (under Firestore limit of 500)
+    async function deleteCollectionInBatches(collRef) {
+      const snap = await getDocs(collRef);
+      const docs = snap.docs;
+      const chunks = chunkArray(docs, 400);
+      for (const chunk of chunks) {
+        const batch = writeBatch(database);
+        chunk.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
     }
-  }
 
-  // === Step 1: Delete existing accounts ===
-  progress('Clearing existing accounts...');
-  await deleteCollectionInBatches(collection(database, 'users', uid, 'accounts'));
+    // === Step 1: Delete existing accounts ===
+    progress('Clearing existing accounts...');
+    await deleteCollectionInBatches(collection(database, 'users', uid, 'accounts'));
 
-  // === Step 2: Delete existing transactions ===
-  progress('Clearing existing transactions...');
-  await deleteCollectionInBatches(collection(database, 'users', uid, 'transactions'));
+    // === Step 2: Delete existing transactions ===
+    progress('Clearing existing transactions...');
+    await deleteCollectionInBatches(collection(database, 'users', uid, 'transactions'));
 
-  // === Step 3: Delete existing friend money ===
-  progress('Clearing existing friend money records...');
-  await deleteCollectionInBatches(collection(database, 'users', uid, 'friendMoney'));
+    // === Step 3: Delete existing friend money ===
+    progress('Clearing existing friend money records...');
+    await deleteCollectionInBatches(collection(database, 'users', uid, 'friendMoney'));
 
   // === Step 4: Restore accounts (preserve original IDs) ===
   progress(`Restoring ${backupData.accounts.length} accounts...`);
@@ -317,7 +326,13 @@ export async function restoreBackup(uid, backupData, onProgress) {
     });
   }
 
-  progress('Restore complete!');
+    progress('Restore complete!');
+  } finally {
+    try {
+      const { deleteDoc } = await import('firebase/firestore');
+      await deleteDoc(globalSessionRef);
+    } catch (e) {}
+  }
 }
 
 /**

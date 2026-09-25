@@ -21,6 +21,7 @@ import {
 import { renderTransactionList } from '../components/transaction-card.js';
 import { renderEmptyTransactions } from '../components/empty-state.js';
 import { openModal, closeModal, showConfirm } from '../components/modal.js';
+import { requestSecureDelete } from '../components/secure-delete-modal.js';
 import { addTransaction, updateTransaction, deleteTransaction } from '../services/firestore.js';
 import { generateBudgetAlerts } from '../services/budget.js';
 import { validateTransaction, validateAmount, validateRequired, validateTodayDate } from '../utils/validators.js';
@@ -1017,24 +1018,23 @@ export function openEditTransferModal(tx, onSaveSuccess) {
  */
 export async function handleDeleteTransaction(tx, onDeleteSuccess) {
   const isTransfer = tx.type === 'TRANSFER';
-  const confirmed = await showConfirm({
-    icon: '🗑️',
-    title: isTransfer ? 'Delete Transfer' : 'Delete Transaction',
-    message: isTransfer
-      ? 'Are you sure you want to delete this transfer? Both source and destination account balances will be restored.'
-      : 'Are you sure you want to delete this transaction? Your account balances will automatically adjust.',
-    confirmText: 'Delete',
-    danger: true
-  });
+  const itemName = tx.reason || (isTransfer ? 'Account Transfer' : `${tx.category} - ${formatCurrency(tx.amount)}`);
+  const uid = dashboardState.user?.uid;
+  const userEmail = dashboardState.user?.email || (dashboardState.profile && dashboardState.profile.email) || '';
 
-  if (confirmed) {
-    try {
-      const uid = dashboardState.user.uid;
+  requestSecureDelete({
+    title: isTransfer ? 'Delete Transfer?' : 'Delete Transaction?',
+    itemType: isTransfer ? 'Transfer' : 'Transaction',
+    itemName,
+    targetId: tx.id,
+    uid,
+    userEmail,
+    impactMessage: isTransfer
+      ? 'Both source and destination account balances will be restored. This action cannot be undone.'
+      : 'Your account balance will automatically adjust. This action cannot be undone.',
+    onVerifyAndDelete: async () => {
       await deleteTransaction(uid, tx.id);
-      toast.success('🗑️ Transaction deleted!');
       if (onDeleteSuccess) onDeleteSuccess();
-    } catch (err) {
-      toast.error('Unable to delete transaction.');
     }
-  }
+  });
 }

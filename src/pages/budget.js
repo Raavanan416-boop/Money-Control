@@ -5,6 +5,7 @@
 import { formatCurrency, EXPENSE_CATEGORIES } from '../utils/formatters.js';
 import { calculateBudgetProgress, saveMonthlyBudget, saveCategoryBudget, removeBudget } from '../services/budget.js';
 import { openModal, closeModal, showConfirm } from '../components/modal.js';
+import { requestSecureDelete } from '../components/secure-delete-modal.js';
 import { toast } from '../utils/toast.js';
 
 let state = {
@@ -123,23 +124,21 @@ export function attachBudgetListeners(refreshData) {
 
   // Delete budget buttons
   document.querySelectorAll('.btn-delete-budget').forEach(btn => {
-    btn.onclick = async () => {
+    btn.onclick = () => {
       const category = btn.dataset.category;
-      const confirmed = await showConfirm({
-        icon: '🗑️',
-        title: 'Delete Budget',
-        message: `Are you sure you want to remove the budget for ${category}?`,
-        danger: true
-      });
-      if (confirmed) {
-        try {
+      requestSecureDelete({
+        title: 'Delete Budget?',
+        itemType: 'Budget',
+        itemName: category,
+        targetId: `budget-${category}`,
+        impactMessage: `Your monthly budget tracking for "${category}" will be permanently removed.`,
+        uid: state.user.uid,
+        userEmail: state.user?.email || (state.profile && state.profile.email) || '',
+        onVerifyAndDelete: async () => {
           await removeBudget(state.user.uid, category);
-          toast.success('Budget removed!');
-          if (refreshData) refreshData();
-        } catch (err) {
-          toast.error('Unable to remove budget.');
+          if (refreshData) await refreshData();
         }
-      }
+      });
     };
   });
 }

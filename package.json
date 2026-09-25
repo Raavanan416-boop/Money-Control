@@ -17,6 +17,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "nodemailer": "^10.0.10",
     "vite": "^6.1.0"
   }
 }

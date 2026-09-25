@@ -3,10 +3,12 @@
 // ============================================
 
 import { logout, deleteAccount } from '../services/auth.js';
-import { updateUserSettings, setInitialBalance } from '../services/firestore.js';
+import { updateUserSettings, setInitialBalance, deleteUserData } from '../services/firestore.js';
 import { exportToCSV, exportToExcel, exportToPDF, exportMonthlyReport } from '../services/export.js';
 import { createBackup, parseBackupFile, validateBackup, restoreBackup } from '../services/backup.js';
 import { openModal, closeModal, showConfirm } from '../components/modal.js';
+import { requestSecureDelete } from '../components/secure-delete-modal.js';
+import { deleteUser } from 'firebase/auth';
 import { formatCurrency } from '../utils/formatters.js';
 import { validateAmount } from '../utils/validators.js';
 import { toast } from '../utils/toast.js';
@@ -250,77 +252,16 @@ export function renderSettingsPage(appState) {
       <div class="settings-section">
         <div class="settings-section-title">📤 Export & Backup</div>
         <div class="settings-group">
-
-          <div class="settings-item" id="btn-export-csv" style="cursor:pointer;">
+          <div class="settings-item" id="btn-settings-export-backup" style="cursor:pointer;">
             <div class="settings-item-left">
-              <div class="settings-item-icon">📄</div>
+              <div class="settings-item-icon">📦</div>
               <div>
-                <div class="settings-item-text">Export as CSV</div>
-                <div class="settings-item-subtitle">Download all transactions as a CSV spreadsheet</div>
+                <div class="settings-item-text">Export & Backup</div>
+                <div class="settings-item-subtitle">Export, backup, or restore your financial data</div>
               </div>
             </div>
-            <div class="settings-item-right">📥</div>
+            <div class="settings-item-right">❯</div>
           </div>
-
-          <div class="settings-item" id="btn-export-excel" style="cursor:pointer;">
-            <div class="settings-item-left">
-              <div class="settings-item-icon">📊</div>
-              <div>
-                <div class="settings-item-text">Export as Excel</div>
-                <div class="settings-item-subtitle">Download .xlsx with Transactions, Accounts, Friends Money & Summary sheets</div>
-              </div>
-            </div>
-            <div class="settings-item-right">📥</div>
-          </div>
-
-          <div class="settings-item" id="btn-export-pdf" style="cursor:pointer;">
-            <div class="settings-item-left">
-              <div class="settings-item-icon">📑</div>
-              <div>
-                <div class="settings-item-text">Export as PDF</div>
-                <div class="settings-item-subtitle">Download professional monthly report as PDF</div>
-              </div>
-            </div>
-            <div class="settings-item-right">📥</div>
-          </div>
-
-          <div class="settings-item" id="btn-export-report" style="cursor:pointer;">
-            <div class="settings-item-left">
-              <div class="settings-item-icon">🖨️</div>
-              <div>
-                <div class="settings-item-text">Print Monthly Report</div>
-                <div class="settings-item-subtitle">Generate printable HTML report for the current month</div>
-              </div>
-            </div>
-            <div class="settings-item-right">🖨️</div>
-          </div>
-
-          <div class="settings-divider" style="height:1px;background:var(--border-color);margin:4px 0;"></div>
-
-          <div class="settings-item" id="btn-create-backup" style="cursor:pointer;">
-            <div class="settings-item-left">
-              <div class="settings-item-icon">💾</div>
-              <div>
-                <div class="settings-item-text">Create Backup</div>
-                <div class="settings-item-subtitle">Download a backup file of all your financial data</div>
-              </div>
-            </div>
-            <div class="settings-item-right">📤</div>
-          </div>
-
-          <div class="settings-item" id="btn-restore-backup" style="cursor:pointer;">
-            <div class="settings-item-left">
-              <div class="settings-item-icon">📥</div>
-              <div>
-                <div class="settings-item-text">Restore Backup</div>
-                <div class="settings-item-subtitle">Restore data from a backup file</div>
-              </div>
-            </div>
-            <div class="settings-item-right">⚠️ ❯</div>
-          </div>
-
-          <!-- Hidden file input for backup restore -->
-          <input type="file" id="restore-backup-file-input" accept=".json" style="display:none;" />
         </div>
       </div>
 
@@ -619,204 +560,11 @@ export function attachSettingsListeners(onLogout, refreshData) {
     };
   }
 
-  // ===== Export CSV =====
-  const exportCsvBtn = document.getElementById('btn-export-csv');
-  if (exportCsvBtn) {
-    exportCsvBtn.onclick = () => {
-      try {
-        exportToCSV(state.transactions, state.accounts);
-        toast.success('📄 Transactions exported to CSV!');
-      } catch (err) {
-        toast.error(err.message || 'Unable to export transactions.');
-      }
-    };
-  }
-
-  // ===== Export Excel =====
-  const exportExcelBtn = document.getElementById('btn-export-excel');
-  if (exportExcelBtn) {
-    exportExcelBtn.onclick = async () => {
-      if (!state.transactions || state.transactions.length === 0) {
-        toast.error('No transactions to export.');
-        return;
-      }
-      try {
-        exportExcelBtn.style.opacity = '0.6';
-        exportExcelBtn.style.pointerEvents = 'none';
-        await exportToExcel(state.transactions, state.accounts, state.friendMoneyRecords);
-        toast.success('📊 Exported to Excel successfully!');
-      } catch (err) {
-        console.error('Excel export error:', err);
-        toast.error('Unable to export to Excel.');
-      } finally {
-        exportExcelBtn.style.opacity = '';
-        exportExcelBtn.style.pointerEvents = '';
-      }
-    };
-  }
-
-  // ===== Export PDF =====
-  const exportPdfBtn = document.getElementById('btn-export-pdf');
-  if (exportPdfBtn) {
-    exportPdfBtn.onclick = async () => {
-      try {
-        exportPdfBtn.style.opacity = '0.6';
-        exportPdfBtn.style.pointerEvents = 'none';
-        const now = new Date();
-        await exportToPDF(
-          state.transactions,
-          state.accounts,
-          state.friendMoneyRecords,
-          now.getMonth(),
-          now.getFullYear()
-        );
-        toast.success('📑 PDF report downloaded!');
-      } catch (err) {
-        console.error('PDF export error:', err);
-        toast.error('Unable to generate PDF report.');
-      } finally {
-        exportPdfBtn.style.opacity = '';
-        exportPdfBtn.style.pointerEvents = '';
-      }
-    };
-  }
-
-  // ===== Print Monthly Report (HTML) =====
-  const exportReportBtn = document.getElementById('btn-export-report');
-  if (exportReportBtn) {
-    exportReportBtn.onclick = () => {
-      try {
-        const now = new Date();
-        exportMonthlyReport(
-          state.transactions,
-          state.accounts,
-          now.getMonth(),
-          now.getFullYear()
-        );
-        toast.success('📑 Printable report opened!');
-      } catch (err) {
-        toast.error('Unable to generate report.');
-      }
-    };
-  }
-
-  // ===== Create Backup =====
-  const createBackupBtn = document.getElementById('btn-create-backup');
-  if (createBackupBtn) {
-    createBackupBtn.onclick = async () => {
-      try {
-        createBackupBtn.style.opacity = '0.6';
-        createBackupBtn.style.pointerEvents = 'none';
-        const result = createBackup(
-          state.user.uid,
-          state.accounts,
-          state.transactions,
-          state.friendMoneyRecords,
-          state.profile
-        );
-        toast.success(`💾 Backup created! (${result.recordCounts.transactions} transactions, ${result.recordCounts.accounts} accounts)`);
-      } catch (err) {
-        console.error('Backup error:', err);
-        toast.error(err.message || 'Unable to create backup.');
-      } finally {
-        createBackupBtn.style.opacity = '';
-        createBackupBtn.style.pointerEvents = '';
-      }
-    };
-  }
-
-  // ===== Restore Backup =====
-  const restoreBackupBtn = document.getElementById('btn-restore-backup');
-  const fileInput = document.getElementById('restore-backup-file-input');
-
-  if (restoreBackupBtn && fileInput) {
-    restoreBackupBtn.onclick = () => {
-      fileInput.value = '';
-      fileInput.click();
-    };
-
-    fileInput.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      let backupData;
-      try {
-        backupData = await parseBackupFile(file);
-      } catch (err) {
-        toast.error(err.message || 'Could not read backup file.');
-        return;
-      }
-
-      const validation = validateBackup(backupData);
-      if (!validation.valid) {
-        toast.error(validation.error || 'Invalid backup file.');
-        return;
-      }
-
-      // Show confirmation modal with backup info
-      const content = `
-        <div class="alert-banner alert-banner-danger" style="margin-bottom: 16px;">
-          <span class="alert-banner-icon">⚠️</span>
-          <div class="alert-banner-text">
-            <strong>This will REPLACE all your current data</strong> with the backup contents. This cannot be undone.
-          </div>
-        </div>
-
-        <div style="background: var(--bg-tertiary); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-          <div style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Backup Details</div>
-          <div style="display: grid; gap: 8px;">
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: var(--text-secondary);">Exported on</span>
-              <span style="font-weight: 600;">${validation.exportedAt || 'Unknown'}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: var(--text-secondary);">Accounts</span>
-              <span style="font-weight: 600;">${validation.recordCounts.accounts}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: var(--text-secondary);">Transactions</span>
-              <span style="font-weight: 600;">${validation.recordCounts.transactions}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: var(--text-secondary);">Friend Money Records</span>
-              <span style="font-weight: 600;">${validation.recordCounts.friendMoney}</span>
-            </div>
-          </div>
-        </div>
-
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <button class="btn btn-danger btn-block" id="btn-confirm-restore">⚠️ Restore Backup Now</button>
-          <button class="btn btn-secondary btn-block" id="btn-cancel-restore">Cancel</button>
-        </div>
-      `;
-
-      openModal({
-        title: '📥 Restore Backup',
-        content,
-        onOpen: (modal) => {
-          modal.querySelector('#btn-cancel-restore').onclick = () => closeModal();
-
-          modal.querySelector('#btn-confirm-restore').onclick = async () => {
-            const confirmBtn = modal.querySelector('#btn-confirm-restore');
-            confirmBtn.disabled = true;
-            confirmBtn.innerHTML = '<span class="spinner"></span> Restoring...';
-
-            try {
-              await restoreBackup(state.user.uid, backupData, (msg) => {
-                confirmBtn.innerHTML = `<span class="spinner"></span> ${msg}`;
-              });
-              closeModal();
-              toast.success('✅ Backup restored successfully! Reloading data...');
-              if (refreshData) setTimeout(() => refreshData(), 500);
-            } catch (err) {
-              console.error('Restore error:', err);
-              toast.error(err.message || 'Restore failed. Please try again.');
-              confirmBtn.disabled = false;
-              confirmBtn.innerHTML = '⚠️ Restore Backup Now';
-            }
-          };
-        }
-      });
+  // ===== Export & Backup Collapsed Modal =====
+  const exportBackupBtn = document.getElementById('btn-settings-export-backup');
+  if (exportBackupBtn) {
+    exportBackupBtn.onclick = () => {
+      openExportBackupModal(refreshData);
     };
   }
 
@@ -839,64 +587,327 @@ export function attachSettingsListeners(onLogout, refreshData) {
     };
   }
 
-  // Delete Account
+  // Delete Account (Secure Two-Step: Exact Name + Gmail OTP)
   const deleteAccBtn = document.getElementById('btn-settings-delete-account');
   if (deleteAccBtn) {
     deleteAccBtn.onclick = () => {
-      const content = `
-        <form id="delete-acc-form" novalidate>
-          <div class="alert-banner alert-banner-danger" style="margin-bottom: 16px;">
-            <span class="alert-banner-icon">🚨</span>
-            <div class="alert-banner-text">
-              This action is permanent! All your data, transactions, and settings will be permanently erased.
-            </div>
-          </div>
+      const userEmail = state.user?.email || (state.profile && state.profile.email) || '';
+      const itemName = userEmail || state.profile?.name || 'My Account';
 
-          <div class="form-group">
-            <label class="form-label" for="del-pass-input">Confirm Password</label>
-            <input type="password" id="del-pass-input" class="form-input" placeholder="Enter password to confirm" required autofocus />
-            <div class="form-error" id="del-pass-error"></div>
-          </div>
-
-          <button type="submit" class="btn btn-danger btn-block btn-lg" id="btn-confirm-delete-acc">
-            Delete My Account Permanently
-          </button>
-        </form>
-      `;
-
-      openModal({
-        title: '🚨 Delete Account',
-        content,
-        onOpen: (modal) => {
-          modal.querySelector('#delete-acc-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const pass = modal.querySelector('#del-pass-input').value;
-            modal.querySelector('#del-pass-error').textContent = '';
-
-            if (!pass) {
-              modal.querySelector('#del-pass-error').textContent = 'Please enter your password.';
-              return;
-            }
-
-            const submitBtn = modal.querySelector('#btn-confirm-delete-acc');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = `<span class="spinner"></span> Deleting...`;
-
+      requestSecureDelete({
+        title: 'Delete Account?',
+        itemType: 'Account',
+        itemName,
+        targetId: 'user-profile-delete',
+        uid: state.user.uid,
+        userEmail,
+        impactMessage: 'This action is permanent! All your data, accounts, transactions, and settings will be permanently erased.',
+        onVerifyAndDelete: async () => {
+          await deleteUserData(state.user.uid);
+          if (state.user) {
             try {
-              await deleteAccount(pass);
-              closeModal();
-              toast.info('Account deleted.');
-              if (onLogout) onLogout();
+              await deleteUser(state.user);
             } catch (err) {
-              modal.querySelector('#del-pass-error').textContent = 'Incorrect password or re-authentication failed.';
-              submitBtn.disabled = false;
-              submitBtn.innerHTML = 'Delete My Account Permanently';
+              console.warn('deleteUser warning:', err);
             }
-          };
+          }
+          toast.info('Account deleted.');
+          if (onLogout) onLogout();
         }
       });
     };
   }
+}
+
+/**
+ * Open the Export & Backup options modal
+ */
+function openExportBackupModal(refreshData) {
+  const content = `
+    <p style="color: var(--text-secondary); margin-bottom: var(--space-4); font-size: var(--fs-sm);">
+      Export, backup, or restore your financial data.
+    </p>
+
+    <div class="settings-group" style="margin-bottom: 0;">
+      <div class="settings-item" id="modal-btn-export-csv" style="cursor:pointer;">
+        <div class="settings-item-left">
+          <div class="settings-item-icon">📄</div>
+          <div>
+            <div class="settings-item-text">Export as CSV</div>
+            <div class="settings-item-subtitle">Download all transactions as a CSV spreadsheet</div>
+          </div>
+        </div>
+        <div class="settings-item-right">📥</div>
+      </div>
+
+      <div class="settings-item" id="modal-btn-export-excel" style="cursor:pointer;">
+        <div class="settings-item-left">
+          <div class="settings-item-icon">📊</div>
+          <div>
+            <div class="settings-item-text">Export as Excel</div>
+            <div class="settings-item-subtitle">Download .xlsx with Transactions, Accounts, Friends Money &amp; Summary sheets</div>
+          </div>
+        </div>
+        <div class="settings-item-right">📥</div>
+      </div>
+
+      <div class="settings-item" id="modal-btn-export-pdf" style="cursor:pointer;">
+        <div class="settings-item-left">
+          <div class="settings-item-icon">📑</div>
+          <div>
+            <div class="settings-item-text">Export as PDF</div>
+            <div class="settings-item-subtitle">Download professional monthly report as PDF</div>
+          </div>
+        </div>
+        <div class="settings-item-right">📥</div>
+      </div>
+
+      <div class="settings-item" id="modal-btn-export-report" style="cursor:pointer;">
+        <div class="settings-item-left">
+          <div class="settings-item-icon">🖨️</div>
+          <div>
+            <div class="settings-item-text">Print Monthly Report</div>
+            <div class="settings-item-subtitle">Generate printable HTML report for the current month</div>
+          </div>
+        </div>
+        <div class="settings-item-right">🖨️</div>
+      </div>
+
+      <div class="settings-divider" style="height:1px;background:var(--border-color);margin:4px 0;"></div>
+
+      <div class="settings-item" id="modal-btn-create-backup" style="cursor:pointer;">
+        <div class="settings-item-left">
+          <div class="settings-item-icon">💾</div>
+          <div>
+            <div class="settings-item-text">Create Backup</div>
+            <div class="settings-item-subtitle">Download a backup file of all your financial data</div>
+          </div>
+        </div>
+        <div class="settings-item-right">📤</div>
+      </div>
+
+      <div class="settings-item" id="modal-btn-restore-backup" style="cursor:pointer;">
+        <div class="settings-item-left">
+          <div class="settings-item-icon">📥</div>
+          <div>
+            <div class="settings-item-text">Restore Backup</div>
+            <div class="settings-item-subtitle">Restore data from a backup file</div>
+          </div>
+        </div>
+        <div class="settings-item-right">⚠️ ❯</div>
+      </div>
+
+      <!-- Hidden file input for backup restore -->
+      <input type="file" id="modal-restore-backup-file-input" accept=".json" style="display:none;" />
+    </div>
+  `;
+
+  openModal({
+    title: '📦 Export & Backup',
+    content,
+    onOpen: (modal) => {
+      // Export CSV
+      const exportCsvBtn = modal.querySelector('#modal-btn-export-csv');
+      if (exportCsvBtn) {
+        exportCsvBtn.onclick = () => {
+          try {
+            exportToCSV(state.transactions, state.accounts);
+            toast.success('📄 Transactions exported to CSV!');
+          } catch (err) {
+            toast.error(err.message || 'Unable to export transactions.');
+          }
+        };
+      }
+
+      // Export Excel
+      const exportExcelBtn = modal.querySelector('#modal-btn-export-excel');
+      if (exportExcelBtn) {
+        exportExcelBtn.onclick = async () => {
+          if (!state.transactions || state.transactions.length === 0) {
+            toast.error('No transactions to export.');
+            return;
+          }
+          try {
+            exportExcelBtn.style.opacity = '0.6';
+            exportExcelBtn.style.pointerEvents = 'none';
+            await exportToExcel(state.transactions, state.accounts, state.friendMoneyRecords);
+            toast.success('📊 Exported to Excel successfully!');
+          } catch (err) {
+            console.error('Excel export error:', err);
+            toast.error('Unable to export to Excel.');
+          } finally {
+            exportExcelBtn.style.opacity = '';
+            exportExcelBtn.style.pointerEvents = '';
+          }
+        };
+      }
+
+      // Export PDF
+      const exportPdfBtn = modal.querySelector('#modal-btn-export-pdf');
+      if (exportPdfBtn) {
+        exportPdfBtn.onclick = async () => {
+          try {
+            exportPdfBtn.style.opacity = '0.6';
+            exportPdfBtn.style.pointerEvents = 'none';
+            const now = new Date();
+            await exportToPDF(
+              state.transactions,
+              state.accounts,
+              state.friendMoneyRecords,
+              now.getMonth(),
+              now.getFullYear()
+            );
+            toast.success('📑 PDF report downloaded!');
+          } catch (err) {
+            console.error('PDF export error:', err);
+            toast.error('Unable to generate PDF report.');
+          } finally {
+            exportPdfBtn.style.opacity = '';
+            exportPdfBtn.style.pointerEvents = '';
+          }
+        };
+      }
+
+      // Print Monthly Report
+      const exportReportBtn = modal.querySelector('#modal-btn-export-report');
+      if (exportReportBtn) {
+        exportReportBtn.onclick = () => {
+          try {
+            const now = new Date();
+            exportMonthlyReport(
+              state.transactions,
+              state.accounts,
+              now.getMonth(),
+              now.getFullYear()
+            );
+            toast.success('📑 Printable report opened!');
+          } catch (err) {
+            toast.error('Unable to generate report.');
+          }
+        };
+      }
+
+      // Create Backup
+      const createBackupBtn = modal.querySelector('#modal-btn-create-backup');
+      if (createBackupBtn) {
+        createBackupBtn.onclick = async () => {
+          try {
+            createBackupBtn.style.opacity = '0.6';
+            createBackupBtn.style.pointerEvents = 'none';
+            const result = createBackup(
+              state.user.uid,
+              state.accounts,
+              state.transactions,
+              state.friendMoneyRecords,
+              state.profile
+            );
+            toast.success(`💾 Backup created! (${result.recordCounts.transactions} transactions, ${result.recordCounts.accounts} accounts)`);
+          } catch (err) {
+            console.error('Backup error:', err);
+            toast.error(err.message || 'Unable to create backup.');
+          } finally {
+            createBackupBtn.style.opacity = '';
+            createBackupBtn.style.pointerEvents = '';
+          }
+        };
+      }
+
+      // Restore Backup
+      const restoreBackupBtn = modal.querySelector('#modal-btn-restore-backup');
+      const fileInput = modal.querySelector('#modal-restore-backup-file-input');
+
+      if (restoreBackupBtn && fileInput) {
+        restoreBackupBtn.onclick = () => {
+          fileInput.value = '';
+          fileInput.click();
+        };
+
+        fileInput.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          let backupData;
+          try {
+            backupData = await parseBackupFile(file);
+          } catch (err) {
+            toast.error(err.message || 'Could not read backup file.');
+            return;
+          }
+
+          const validation = validateBackup(backupData);
+          if (!validation.valid) {
+            toast.error(validation.error || 'Invalid backup file.');
+            return;
+          }
+
+          // Show confirmation modal with backup info
+          const content = `
+            <div class="alert-banner alert-banner-danger" style="margin-bottom: 16px;">
+              <span class="alert-banner-icon">⚠️</span>
+              <div class="alert-banner-text">
+                <strong>This will REPLACE all your current data</strong> with the backup contents. This cannot be undone.
+              </div>
+            </div>
+
+            <div style="background: var(--bg-tertiary); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+              <div style="font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Backup Details</div>
+              <div style="display: grid; gap: 8px;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">Exported on</span>
+                  <span style="font-weight: 600;">${validation.exportedAt || 'Unknown'}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">Accounts</span>
+                  <span style="font-weight: 600;">${validation.recordCounts.accounts}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">Transactions</span>
+                  <span style="font-weight: 600;">${validation.recordCounts.transactions}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary);">Friend Money Records</span>
+                  <span style="font-weight: 600;">${validation.recordCounts.friendMoney}</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <button class="btn btn-danger btn-block" id="btn-confirm-restore">⚠️ Restore Backup Now</button>
+              <button class="btn btn-secondary btn-block" id="btn-cancel-restore">Cancel</button>
+            </div>
+          `;
+
+          openModal({
+            title: '📥 Restore Backup',
+            content,
+            onOpen: (restoreModal) => {
+              restoreModal.querySelector('#btn-cancel-restore').onclick = () => closeModal();
+
+              restoreModal.querySelector('#btn-confirm-restore').onclick = async () => {
+                const confirmBtn = restoreModal.querySelector('#btn-confirm-restore');
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<span class="spinner"></span> Restoring...';
+
+                try {
+                  await restoreBackup(state.user.uid, backupData, (msg) => {
+                    confirmBtn.innerHTML = `<span class="spinner"></span> ${msg}`;
+                  });
+                  closeModal();
+                  toast.success('✅ Backup restored successfully! Reloading data...');
+                  if (refreshData) setTimeout(() => refreshData(), 500);
+                } catch (err) {
+                  console.error('Restore error:', err);
+                  toast.error(err.message || 'Restore failed. Please try again.');
+                  confirmBtn.disabled = false;
+                  confirmBtn.innerHTML = '⚠️ Restore Backup Now';
+                }
+              };
+            }
+          });
+        };
+      }
+    }
+  });
 }
 
 function refreshSettingsPage() {

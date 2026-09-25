@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, formatTime } from '../utils/formatters.js';
 import { calculateAccountBalances, calculateAccountHistory } from '../utils/calculations.js';
 import { createAccount, updateAccount, deleteAccountDoc } from '../services/firestore.js';
 import { openModal, closeModal, showConfirm } from '../components/modal.js';
+import { requestSecureDelete } from '../components/secure-delete-modal.js';
 import { validateName, validateAmount } from '../utils/validators.js';
 import { toast } from '../utils/toast.js';
 
@@ -275,34 +276,28 @@ export function attachAccountsListeners(refreshData) {
 
     const deleteBtn = document.getElementById('btn-delete-account');
     if (deleteBtn) {
-      deleteBtn.onclick = async () => {
+      deleteBtn.onclick = () => {
         const selectedAcc = state.accounts.find(a => a.id === state.selectedAccountId);
         if (!selectedAcc) return;
 
-        const confirmed = await showConfirm({
-          icon: '🗑️',
-          title: 'Delete this account?',
-          message: 'All account-related transaction history may also be affected. This action cannot be undone.',
-          cancelText: 'Cancel',
-          confirmText: 'Delete',
-          danger: true
-        });
-
-        if (confirmed) {
-          try {
+        requestSecureDelete({
+          title: 'Delete Account?',
+          itemType: 'Account',
+          itemName: selectedAcc.name,
+          impactMessage: 'All account-related transactions and balances will be permanently affected. This action cannot be undone.',
+          targetId: selectedAcc.id,
+          uid: state.user.uid,
+          userEmail: state.user?.email || (state.profile && state.profile.email) || '',
+          onVerifyAndDelete: async () => {
             await deleteAccountDoc(state.user.uid, selectedAcc.id);
             state.selectedAccountId = null;
             if (window.appState) {
               window.appState.selectedAccountId = null;
               window.appState.accountOriginPage = null;
             }
-            toast.success(`Account "${selectedAcc.name}" deleted successfully.`);
-            if (refreshData) refreshData();
-          } catch (err) {
-            console.error('Error deleting account:', err);
-            toast.error('Failed to delete account. Please try again.');
+            if (refreshData) await refreshData();
           }
-        }
+        });
       };
     }
 
