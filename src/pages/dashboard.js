@@ -22,6 +22,7 @@ import { renderTransactionList } from '../components/transaction-card.js';
 import { renderEmptyTransactions } from '../components/empty-state.js';
 import { openModal, closeModal, showConfirm } from '../components/modal.js';
 import { requestSecureDelete } from '../components/secure-delete-modal.js';
+import { openTransactionEditModal } from '../components/transaction-edit-modal.js';
 import { addTransaction, updateTransaction, deleteTransaction } from '../services/firestore.js';
 import { generateBudgetAlerts } from '../services/budget.js';
 import { validateTransaction, validateAmount, validateRequired, validateTodayDate } from '../utils/validators.js';
@@ -362,6 +363,21 @@ export function attachDashboardListeners(navigateFn, refreshData) {
   const emptyAddBtn = document.getElementById('empty-add-money-btn');
   if (emptyAddBtn) emptyAddBtn.onclick = () => openAddTransactionModal('INCOME', refreshData);
 
+  // Click on recent activity item -> open transaction details / edit modal
+  const recentTxContainer = document.querySelector('.recent-tx-card');
+  if (recentTxContainer) {
+    recentTxContainer.querySelectorAll('.transaction-item').forEach(item => {
+      item.onclick = (e) => {
+        if (e.target.closest('.transaction-actions')) return;
+        const txId = item.dataset.txId;
+        const tx = dashboardState.transactions.find(t => t.id === txId);
+        if (tx) {
+          openTransactionEditModal(tx, { onSaveSuccess: refreshData, state: dashboardState });
+        }
+      };
+    });
+  }
+
   // Edit / Delete buttons on recent activity
   document.querySelectorAll('.transaction-action-btn[data-action]').forEach(btn => {
     btn.onclick = (e) => {
@@ -372,11 +388,7 @@ export function attachDashboardListeners(navigateFn, refreshData) {
       if (!tx) return;
 
       if (action === 'edit') {
-        if (tx.type === 'TRANSFER') {
-          openEditTransferModal(tx, refreshData);
-        } else {
-          openEditTransactionModal(tx, refreshData);
-        }
+        openTransactionEditModal(tx, { onSaveSuccess: refreshData, state: dashboardState });
       } else if (action === 'delete') {
         handleDeleteTransaction(tx, refreshData);
       }

@@ -14,7 +14,8 @@ import {
   orderBy,
   onSnapshot,
   getDocs,
-  writeBatch
+  writeBatch,
+  deleteField
 } from 'firebase/firestore';
 import { db, getDb } from '../config/firebase.js';
 import { calculateAccountHistory } from '../utils/calculations.js';
@@ -310,6 +311,73 @@ export async function updateTransaction(uid, txId, data) {
   if (data.type !== undefined) txData.type = data.type;
   if (data.sourceAccountId !== undefined) txData.sourceAccountId = data.sourceAccountId;
   if (data.destinationAccountId !== undefined) txData.destinationAccountId = data.destinationAccountId;
+
+  await updateDoc(txRef, txData);
+}
+
+/**
+ * Update a transaction with full balance recalculation (for OTP-verified corrections).
+ * This function handles the case where amount, account, date, or type changes.
+ * Since balances are calculated by scanning all transactions (calculateAccountBalance),
+ * we simply need to update the transaction document with correct data.
+ * The balance recalculation happens automatically via the real-time subscription
+ * and calculateAccountBalance in calculations.js.
+ *
+ * @param {string} uid - User UID
+ * @param {string} txId - Transaction ID
+ * @param {Object} originalTx - The original transaction data (snapshot before edit)
+ * @param {Object} correctedData - The corrected fields
+ * @returns {Promise<void>}
+ */
+export async function updateTransactionWithCorrection(uid, txId, originalTx, correctedData) {
+  if (!uid || !txId) return;
+  const txRef = doc(firestoreDb(), 'users', uid, 'transactions', txId);
+
+  const txData = {
+    amount: Number(correctedData.amount),
+    date: correctedData.date,
+    reason: (correctedData.reason || '').trim(),
+    category: correctedData.category || (correctedData.type === 'TRANSFER' ? 'Transfer' : 'Other'),
+    notes: correctedData.notes !== undefined ? (correctedData.notes || '').trim() : (originalTx.notes || '').trim(),
+    updatedAt: new Date().toISOString(),
+    correctedAt: new Date().toISOString(),
+    correctedFrom: {
+      amount: originalTx.amount,
+      date: originalTx.date,
+      sourceAccountId: originalTx.sourceAccountId || null,
+      destinationAccountId: originalTx.destinationAccountId || null,
+      category: originalTx.category || null,
+      reason: originalTx.reason || ''
+    }
+  };
+
+  // Update type and cleanly assign account IDs
+  const targetType = correctedData.type || originalTx.type;
+  txData.type = targetType;
+
+  if (targetType === 'INCOME') {
+    if (correctedData.destinationAccountId !== undefined) {
+      txData.destinationAccountId = correctedData.destinationAccountId;
+    }
+    txData.sourceAccountId = deleteField();
+  } else if (targetType === 'EXPENSE') {
+    if (correctedData.sourceAccountId !== undefined) {
+      txData.sourceAccountId = correctedData.sourceAccountId;
+    }
+    txData.destinationAccountId = deleteField();
+  } else if (targetType === 'TRANSFER') {
+    if (correctedData.sourceAccountId !== undefined) {
+      txData.sourceAccountId = correctedData.sourceAccountId;
+    }
+    if (correctedData.destinationAccountId !== undefined) {
+      txData.destinationAccountId = correctedData.destinationAccountId;
+    }
+  }
+
+  // Preserve the original createdAt time for ordering
+  if (correctedData.createdAt) {
+    txData.createdAt = correctedData.createdAt;
+  }
 
   await updateDoc(txRef, txData);
 }

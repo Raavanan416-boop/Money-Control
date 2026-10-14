@@ -12,9 +12,10 @@
  * @param {string} options.otp - 6-digit OTP code
  * @param {string} options.itemName - Name of item being deleted
  * @param {string} options.itemType - Type of item being deleted
+ * @param {string} [options.field] - Name of field being unlocked (e.g. Amount, Date)
  * @returns {Promise<{ success: boolean }>}
  */
-export async function sendOtpEmailNotification({ email, otp, itemName, itemType }) {
+export async function sendOtpEmailNotification({ email, otp, itemName, itemType, field }) {
   if (!email) {
     console.warn('sendOtpEmailNotification: No recipient email provided.');
     return { success: false, error: 'Recipient email required' };
@@ -31,7 +32,8 @@ export async function sendOtpEmailNotification({ email, otp, itemName, itemType 
         email,
         otp,
         itemName,
-        itemType
+        itemType,
+        field
       })
     });
 
@@ -62,7 +64,7 @@ export async function sendOtpEmailNotification({ email, otp, itemName, itemType 
           template_params: {
             to_email: email,
             otp_code: otp,
-            item_name: itemName || 'Item',
+            item_name: field ? `${field} (${itemName || 'Transaction'})` : (itemName || 'Item'),
             item_type: itemType || 'Record'
           }
         })
@@ -79,6 +81,16 @@ export async function sendOtpEmailNotification({ email, otp, itemName, itemType 
   const resendApiKey = import.meta.env?.VITE_RESEND_API_KEY;
   if (resendApiKey) {
     try {
+      const isEditOtp = itemType === 'Transaction Edit';
+      const actionText = isEditOtp
+        ? (field
+            ? `You requested to unlock the <strong style="color: #c084fc;">${field}</strong> field to edit transaction: <strong style="color: #a855f7;">${itemName || 'Transaction'}</strong>.`
+            : `You requested to unlock and correct transaction: <strong style="color: #a855f7;">${itemName || 'Transaction'}</strong>.`)
+        : `You requested to permanently delete <strong>${itemName || 'Item'}</strong> (${itemType || 'Record'}).`;
+      const subjectText = isEditOtp
+        ? `🔐 Money Control — Unlock ${field ? field + ' ' : ''}Verification: ${otp}`
+        : `🔐 Money Control Verification Code: ${otp}`;
+
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -88,12 +100,12 @@ export async function sendOtpEmailNotification({ email, otp, itemName, itemType 
         body: JSON.stringify({
           from: import.meta.env?.VITE_EMAIL_FROM || 'Money Control <security@moneycontrol.app>',
           to: [email],
-          subject: `🔐 Money Control Verification Code: ${otp}`,
+          subject: subjectText,
           html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0d1b; color: #f1f5f9; padding: 32px; border-radius: 16px; max-width: 500px; margin: 0 auto;">
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0d1b; color: #f1f5f9; padding: 32px; border-radius: 16px; max-width: 500px; margin: 0 auto; border: 1px solid #2d2640;">
               <h2 style="color: #c084fc; margin-top: 0;">🔐 Security Verification</h2>
               <p style="color: #94a3b8; font-size: 15px; line-height: 1.5;">
-                You requested to permanently delete <strong>${itemName}</strong> (${itemType || 'Record'}).
+                ${actionText}
               </p>
               <p style="color: #94a3b8; font-size: 14px;">Your one-time verification code is:</p>
               <div style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #a855f7; background: #1a162b; border: 1px solid #3b2d54; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0;">

@@ -18,6 +18,34 @@ service cloud.firestore {
       );
     }
 
+    // Helper function to verify that an OTP edit session exists and is verified
+    function isEditVerified(userId, targetId) {
+      return (
+        exists(/databases/$(database)/documents/users/$(userId)/editSessions/$(targetId))
+        && get(/databases/$(database)/documents/users/$(userId)/editSessions/$(targetId)).data.verified == true
+        && get(/databases/$(database)/documents/users/$(userId)/editSessions/$(targetId)).data.expiresAt > request.time.toMillis()
+      );
+    }
+
+    // Helper function to verify that an OTP edit session exists for a specific field and is verified
+    function isFieldEditVerified(userId, targetId, field) {
+      return (
+        // 1. Dedicated field session e.g. editSessions/{transactionId}_{field}
+        (
+          exists(/databases/$(database)/documents/users/$(userId)/editSessions/$(targetId + '_' + field))
+          && get(/databases/$(database)/documents/users/$(userId)/editSessions/$(targetId + '_' + field)).data.verified == true
+          && get(/databases/$(database)/documents/users/$(userId)/editSessions/$(targetId + '_' + field)).data.expiresAt > request.time.toMillis()
+        )
+        ||
+        // 2. Summary session e.g. editSessions/{transactionId} with fieldUnlocked boolean
+        (
+          exists(/databases/$(database)/documents/users/$(userId)/editSessions/$(targetId))
+          && get(/databases/$(database)/documents/users/$(userId)/editSessions/$(targetId)).data.get(field + 'Unlocked', false) == true
+          && get(/databases/$(database)/documents/users/$(userId)/editSessions/$(targetId)).data.expiresAt > request.time.toMillis()
+        )
+      );
+    }
+
     // Users can only access their own data
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
@@ -25,6 +53,18 @@ service cloud.firestore {
       // Delete verification sessions subcollection
       match /deleteSessions/{sessionId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Edit verification sessions subcollection
+      match /editSessions/{sessionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Correction audit history subcollection (read-only after creation, no user delete)
+      match /correctionHistory/{recordId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId;
+        // No update or delete allowed — audit records are immutable
       }
 
       // Accounts subcollection
@@ -46,11 +86,47 @@ service cloud.firestore {
       match /transactions/{transactionId} {
         allow read: if request.auth != null && request.auth.uid == userId;
         
-        allow create, update: if request.auth != null 
+        allow create: if request.auth != null 
           && request.auth.uid == userId
           && request.resource.data.type in ['INCOME', 'EXPENSE', 'TRANSFER']
           && request.resource.data.amount is number
           && request.resource.data.amount > 0;
+
+        allow update: if request.auth != null 
+          && request.auth.uid == userId
+          && request.resource.data.type in ['INCOME', 'EXPENSE', 'TRANSFER']
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && (
+            // Amount can only change if amount OTP was verified
+            request.resource.data.amount == resource.data.amount
+            || isFieldEditVerified(userId, transactionId, 'amount')
+          )
+          && (
+            // Date can only change if date OTP was verified
+            request.resource.data.date == resource.data.date
+            || isFieldEditVerified(userId, transactionId, 'date')
+          )
+          && (
+            // Type can only change if type OTP was verified
+            request.resource.data.type == resource.data.type
+            || isFieldEditVerified(userId, transactionId, 'type')
+          )
+          && (
+            // Account(s) can only change if account OTP was verified
+            (
+              request.resource.data.get('sourceAccountId', null) == resource.data.get('sourceAccountId', null)
+              && request.resource.data.get('destinationAccountId', null) == resource.data.get('destinationAccountId', null)
+            )
+            || isFieldEditVerified(userId, transactionId, 'account')
+          )
+          && (
+            // Time / createdAt can only change if time OTP was verified
+            (
+              request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null)
+            )
+            || isFieldEditVerified(userId, transactionId, 'time')
+          );
 
         allow delete: if request.auth != null && request.auth.uid == userId
           && isDeleteVerified(userId, transactionId);

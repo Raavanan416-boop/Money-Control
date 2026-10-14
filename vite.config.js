@@ -51,12 +51,26 @@ function otpDevServerPlugin(env) {
         req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
-            const { email, otp, itemName, itemType } = data;
+            const { email, otp, itemName, itemType, field } = data;
+
+            const isEditOtp = itemType === 'Transaction Edit';
+            const fieldName = field || '';
+            const actionText = isEditOtp
+              ? (fieldName
+                  ? `You requested to unlock the <strong style="color: #c084fc;">${fieldName}</strong> field to edit transaction: <strong style="color: #a855f7;">${itemName || 'Transaction'}</strong>.`
+                  : `You requested to unlock and correct transaction: <strong style="color: #a855f7;">${itemName || 'Transaction'}</strong>.`)
+              : `You requested to permanently delete <strong style="color: #f87171;">${itemName || 'Item'}</strong> (${itemType || 'Record'}).`;
+            const subjectText = isEditOtp
+              ? `🔐 Money Control — Unlock ${fieldName ? fieldName + ' ' : ''}Verification: ${otp}`
+              : `🔐 Money Control Verification Code: ${otp}`;
+            const plainText = isEditOtp
+              ? `Your Money Control verification code is: ${otp}. It will expire in 5 minutes. ${fieldName ? 'Unlock ' + fieldName + ' to edit' : 'Transaction edit unlock for'}: ${itemName || 'Transaction'}`
+              : `Your Money Control verification code is: ${otp}. It will expire in 5 minutes. Permanent deletion of: ${itemName || 'Item'}`;
 
             console.log('\n============================================================');
-            console.log('🔐 [MONEY-CONTROL] SECURE DELETE OTP VERIFICATION');
+            console.log(`🔐 [MONEY-CONTROL] ${isEditOtp ? 'TRANSACTION EDIT (' + (fieldName || 'FIELD') + ')' : 'SECURE DELETE'} OTP VERIFICATION`);
             console.log(`📧 Recipient Email : ${email}`);
-            console.log(`🗑️ Deleting Target : ${itemName} (${itemType || 'Record'})`);
+            console.log(`🎯 Target Item     : ${itemName || 'Transaction'} (${itemType || 'Record'})`);
             console.log(`🔢 6-Digit OTP Code: ${otp}`);
             console.log('⏱️ Validity Period : 5 minutes');
             console.log('============================================================\n');
@@ -82,15 +96,15 @@ function otpDevServerPlugin(env) {
                 await transporter.sendMail({
                   from: `"Money Control Security" <${gmailUser}>`,
                   to: email,
-                  subject: `🔐 Money Control Verification Code: ${otp}`,
-                  text: `Your Money Control verification code is: ${otp}. It will expire in 5 minutes. Permanent deletion of: ${itemName}`,
+                  subject: subjectText,
+                  text: plainText,
                   html: `
                     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0d1b; color: #f1f5f9; padding: 32px; border-radius: 16px; max-width: 500px; margin: 0 auto; border: 1px solid #2d2640;">
                       <h2 style="color: #c084fc; margin-top: 0; display: flex; align-items: center; gap: 8px;">
                         🔐 Security Verification
                       </h2>
                       <p style="color: #94a3b8; font-size: 15px; line-height: 1.5;">
-                        You requested to permanently delete <strong style="color: #f87171;">${itemName}</strong> (${itemType || 'Record'}).
+                        ${actionText}
                       </p>
                       <p style="color: #94a3b8; font-size: 14px; margin-bottom: 8px;">Your 6-digit verification code is:</p>
                       <div style="font-size: 34px; font-weight: 800; letter-spacing: 10px; color: #a855f7; background: #1a162b; border: 1px solid #3b2d54; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0; font-family: monospace;">
@@ -128,12 +142,12 @@ function otpDevServerPlugin(env) {
                   body: JSON.stringify({
                     from: env.EMAIL_FROM || process.env.EMAIL_FROM || 'Money Control <security@moneycontrol.app>',
                     to: [email],
-                    subject: `🔐 Money Control Verification Code: ${otp}`,
+                    subject: subjectText,
                     html: `
                       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0d1b; color: #f1f5f9; padding: 32px; border-radius: 16px; max-width: 500px; margin: 0 auto; border: 1px solid #2d2640;">
                         <h2 style="color: #c084fc; margin-top: 0;">🔐 Security Verification</h2>
                         <p style="color: #94a3b8; font-size: 15px; line-height: 1.5;">
-                          You requested to permanently delete <strong style="color: #f87171;">${itemName}</strong> (${itemType || 'Record'}).
+                          ${actionText}
                         </p>
                         <p style="color: #94a3b8; font-size: 14px;">Your one-time verification code is:</p>
                         <div style="font-size: 34px; font-weight: 800; letter-spacing: 10px; color: #a855f7; background: #1a162b; border: 1px solid #3b2d54; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0; font-family: monospace;">
@@ -175,12 +189,12 @@ function otpDevServerPlugin(env) {
                   body: JSON.stringify({
                     sender: { name: 'Money Control', email: env.BREVO_SENDER || process.env.BREVO_SENDER || 'noreply@moneycontrol.app' },
                     to: [{ email }],
-                    subject: `🔐 Money Control Verification Code: ${otp}`,
+                    subject: subjectText,
                     htmlContent: `
-                      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0d1b; color: #f1f5f9; padding: 32px; border-radius: 16px; max-width: 500px; margin: 0 auto;">
+                      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0d1b; color: #f1f5f9; padding: 32px; border-radius: 16px; max-width: 500px; margin: 0 auto; border: 1px solid #2d2640;">
                         <h2 style="color: #c084fc; margin-top: 0;">🔐 Security Verification</h2>
                         <p style="color: #94a3b8; font-size: 15px; line-height: 1.5;">
-                          You requested to permanently delete <strong>${itemName}</strong> (${itemType || 'Record'}).
+                          ${actionText}
                         </p>
                         <div style="font-size: 34px; font-weight: 800; letter-spacing: 10px; color: #a855f7; background: #1a162b; border: 1px solid #3b2d54; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0; font-family: monospace;">
                           ${otp}
