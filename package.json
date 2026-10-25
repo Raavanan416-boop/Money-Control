@@ -14,10 +14,10 @@
     "firebase": "^11.2.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
+    "nodemailer": "^10.0.10",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "nodemailer": "^10.0.10",
     "vite": "^6.1.0"
   }
 }

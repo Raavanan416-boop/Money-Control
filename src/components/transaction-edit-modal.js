@@ -425,7 +425,7 @@ export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
           startTimer();
         } catch (err) {
           console.error('Error sending field edit OTP:', err);
-          const msg = err.message?.includes('Please wait') ? err.message : 'Unable to send OTP. Please try again.';
+          const msg = err.message || 'Unable to send OTP. Please try again.';
           toast.error(msg);
           sendBtn.disabled = false;
           sendBtn.innerHTML = '📧 Send OTP';
@@ -474,7 +474,7 @@ export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
           startTimer();
         } catch (err) {
           console.error('Error resending edit OTP:', err);
-          const msg = err.message?.includes('Please wait') ? err.message : 'Unable to send OTP. Please try again.';
+          const msg = err.message || 'Unable to send OTP. Please try again.';
           toast.error(msg);
           if (errorEl) errorEl.textContent = msg;
           resendBtn.disabled = false;

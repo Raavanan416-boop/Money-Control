@@ -16,6 +16,20 @@ function maskEmailForLog(email) {
 }
 
 export default async function handler(req, res) {
+  // Configure CORS headers for mobile and cross-origin clients
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+  );
+
+  // Handle preflight OPTIONS request from mobile browsers or apps
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
@@ -55,20 +69,24 @@ export default async function handler(req, res) {
     let provider = null;
     let deliveryError = null;
 
-    // 1. Send via Gmail SMTP if configured
-    const gmailUser = process.env.GMAIL_USER;
-    const gmailPass = (process.env.GMAIL_APP_PASS || process.env.GMAIL_PASS || '').replace(/\s+/g, '');
+    // 1. Send via Gmail SMTP if configured (using env vars or verified server fallback)
+    const gmailUser = process.env.GMAIL_USER || 'skaviraj416@gmail.com';
+    const rawPass = process.env.GMAIL_APP_PASS || process.env.GMAIL_PASS || 'dqan kufp byaa jwwq';
+    const gmailPass = (rawPass || '').replace(/\s+/g, '');
 
     if (gmailUser && gmailPass) {
       try {
         const transporter = nodemailer.createTransport({
-          service: 'gmail',
+          host: 'smtp.gmail.com',
+          port: 465,
+          secure: true,
           auth: {
             user: gmailUser,
             pass: gmailPass
           },
           connectionTimeout: 10000,
-          greetingTimeout: 5000
+          greetingTimeout: 10000,
+          socketTimeout: 15000
         });
 
         const info = await transporter.sendMail({

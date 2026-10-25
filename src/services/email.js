@@ -4,6 +4,18 @@
 // ============================================
 
 /**
+ * Resolve the API endpoint for OTP sending.
+ * Supports VITE_API_BASE_URL / VITE_API_URL environment configuration for mobile & cross-origin setups.
+ */
+function getOtpEndpoint() {
+  const envBase = (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL)) || '';
+  if (envBase) {
+    return `${String(envBase).replace(/\/+$/, '')}/api/send-otp`;
+  }
+  return '/api/send-otp';
+}
+
+/**
  * Dispatch OTP email notification to the user's Gmail/email address
  * Uses the secure backend endpoint /api/send-otp.
  * Only returns success: true when the server confirms real email delivery acceptance.
@@ -29,8 +41,10 @@ export async function sendOtpEmailNotification({ email, otp, itemName, itemType,
     return { success: false, delivered: false, error: 'A valid 6-digit OTP code is required.' };
   }
 
+  const endpoint = getOtpEndpoint();
+
   try {
-    const res = await fetch('/api/send-otp', {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -55,8 +69,8 @@ export async function sendOtpEmailNotification({ email, otp, itemName, itemType,
       };
     }
 
-    const failureReason = data.error || (res.ok ? 'Email was not accepted for delivery by the provider.' : `Server error (${res.status})`);
-    console.error('OTP email delivery failed:', failureReason);
+    const failureReason = data.error || data.message || (res.ok ? 'Email was not accepted for delivery by the provider.' : `Verification server error (${res.status})`);
+    console.error('OTP email delivery failed:', failureReason, data);
     return {
       success: false,
       delivered: false,
@@ -64,7 +78,7 @@ export async function sendOtpEmailNotification({ email, otp, itemName, itemType,
       details: data
     };
   } catch (err) {
-    console.error('Network error calling /api/send-otp:', err);
+    console.error(`Network error calling OTP endpoint (${endpoint}):`, err);
     return {
       success: false,
       delivered: false,

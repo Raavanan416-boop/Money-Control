@@ -53,6 +53,18 @@ function otpDevServerPlugin(initialEnv) {
     name: 'otp-dev-server',
     configureServer(server) {
       server.middlewares.use('/api/send-otp', async (req, res) => {
+        // Set CORS headers so mobile devices on LAN or separate origins can communicate
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+        // Handle preflight OPTIONS request
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 200;
+          res.end();
+          return;
+        }
+
         if (req.method !== 'POST') {
           res.statusCode = 405;
           res.setHeader('Content-Type', 'application/json');
@@ -111,19 +123,23 @@ function otpDevServerPlugin(initialEnv) {
             let deliveryError = null;
 
             // 1. Gmail SMTP via Nodemailer
-            const gmailUser = runtimeEnv.GMAIL_USER;
-            const gmailPass = (runtimeEnv.GMAIL_APP_PASS || runtimeEnv.GMAIL_PASS || '').replace(/\s+/g, '');
+            const gmailUser = runtimeEnv.GMAIL_USER || 'skaviraj416@gmail.com';
+            const rawPass = runtimeEnv.GMAIL_APP_PASS || runtimeEnv.GMAIL_PASS || 'dqan kufp byaa jwwq';
+            const gmailPass = (rawPass || '').replace(/\s+/g, '');
 
             if (gmailUser && gmailPass) {
               try {
                 const transporter = nodemailer.createTransport({
-                  service: 'gmail',
+                  host: 'smtp.gmail.com',
+                  port: 465,
+                  secure: true,
                   auth: {
                     user: gmailUser,
                     pass: gmailPass
                   },
                   connectionTimeout: 10000,
-                  greetingTimeout: 5000
+                  greetingTimeout: 10000,
+                  socketTimeout: 15000
                 });
 
                 const info = await transporter.sendMail({
@@ -285,6 +301,7 @@ export default defineConfig(({ mode }) => {
       otpDevServerPlugin(env)
     ],
     server: {
+      host: true, // Listen on 0.0.0.0 so mobile devices on the same Wi-Fi can connect
       port: 3000,
       strictPort: false,
       cors: true,

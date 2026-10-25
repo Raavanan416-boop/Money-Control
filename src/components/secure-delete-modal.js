@@ -221,7 +221,7 @@ export function requestSecureDelete({
           renderStep2InModal(modal);
         } catch (err) {
           console.error('Error generating delete session:', err);
-          toast.error('Unable to send OTP. Please try again.');
+          toast.error(err.message || 'Unable to send OTP. Please try again.');
           continueBtn.disabled = false;
           continueBtn.innerHTML = 'Continue';
         }
@@ -320,7 +320,7 @@ export function requestSecureDelete({
           startTimer();
         } catch (err) {
           console.error('Error resending OTP:', err);
-          const msg = err.message?.includes('Please wait') ? err.message : 'Unable to send OTP. Please try again.';
+          const msg = err.message || 'Unable to send OTP. Please try again.';
           toast.error(msg);
           if (errorEl) errorEl.textContent = msg;
           resendBtn.disabled = false;
