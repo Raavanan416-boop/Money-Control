@@ -1,27 +1,34 @@
 // ============================================
 // 💰 Money Control — Email Notification Service
+// Secure backend delivery via /api/send-otp
 // ============================================
 
 /**
  * Dispatch OTP email notification to the user's Gmail/email address
- * Uses available serverless endpoints or configured direct mail dispatchers.
- * Never logs or exposes plaintext OTP inside the frontend client UI.
+ * Uses the secure backend endpoint /api/send-otp.
+ * Only returns success: true when the server confirms real email delivery acceptance.
  * 
  * @param {Object} options
  * @param {string} options.email - User email address
  * @param {string} options.otp - 6-digit OTP code
- * @param {string} options.itemName - Name of item being deleted
- * @param {string} options.itemType - Type of item being deleted
+ * @param {string} options.itemName - Name of item being modified/deleted
+ * @param {string} options.itemType - Type of item ('Transaction Edit', 'Account', etc.)
  * @param {string} [options.field] - Name of field being unlocked (e.g. Amount, Date)
- * @returns {Promise<{ success: boolean }>}
+ * @returns {Promise<{ success: boolean, delivered: boolean, via?: string, error?: string, details?: Object }>}
  */
 export async function sendOtpEmailNotification({ email, otp, itemName, itemType, field }) {
-  if (!email) {
-    console.warn('sendOtpEmailNotification: No recipient email provided.');
-    return { success: false, error: 'Recipient email required' };
+  const cleanEmail = String(email || '').trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+    console.warn('sendOtpEmailNotification: Invalid or missing recipient email.');
+    return { success: false, delivered: false, error: 'A valid recipient email address is required.' };
   }
 
-  // 1. Try local dev server / Vercel API endpoint `/api/send-otp`
+  const cleanOtp = String(otp || '').trim();
+  if (!cleanOtp || !/^\d{6}$/.test(cleanOtp)) {
+    return { success: false, delivered: false, error: 'A valid 6-digit OTP code is required.' };
+  }
+
   try {
     const res = await fetch('/api/send-otp', {
       method: 'POST',
@@ -29,102 +36,40 @@ export async function sendOtpEmailNotification({ email, otp, itemName, itemType,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        email,
-        otp,
+        email: cleanEmail,
+        otp: cleanOtp,
         itemName,
         itemType,
         field
       })
     });
 
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return { success: true, via: 'api', details: data };
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.delivered === true) {
+      return {
+        success: true,
+        delivered: true,
+        via: data.provider || 'api',
+        details: data
+      };
     }
+
+    const failureReason = data.error || (res.ok ? 'Email was not accepted for delivery by the provider.' : `Server error (${res.status})`);
+    console.error('OTP email delivery failed:', failureReason);
+    return {
+      success: false,
+      delivered: false,
+      error: failureReason,
+      details: data
+    };
   } catch (err) {
-    // API endpoint might be offline or running purely as static SPA without dev server middleware
+    console.error('Network error calling /api/send-otp:', err);
+    return {
+      success: false,
+      delivered: false,
+      error: 'Unable to reach the verification email server. Please check your network connection.'
+    };
   }
-
-  // 2. EmailJS REST API fallback (if environment credentials are provided)
-  const emailJsService = import.meta.env?.VITE_EMAILJS_SERVICE_ID;
-  const emailJsTemplate = import.meta.env?.VITE_EMAILJS_TEMPLATE_ID;
-  const emailJsKey = import.meta.env?.VITE_EMAILJS_PUBLIC_KEY;
-
-  if (emailJsService && emailJsTemplate && emailJsKey) {
-    try {
-      const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          service_id: emailJsService,
-          template_id: emailJsTemplate,
-          user_id: emailJsKey,
-          template_params: {
-            to_email: email,
-            otp_code: otp,
-            item_name: field ? `${field} (${itemName || 'Transaction'})` : (itemName || 'Item'),
-            item_type: itemType || 'Record'
-          }
-        })
-      });
-      if (res.ok) {
-        return { success: true, via: 'emailjs' };
-      }
-    } catch (e) {
-      console.warn('EmailJS dispatch failed:', e);
-    }
-  }
-
-  // 3. Resend REST API fallback (if environment credentials are provided)
-  const resendApiKey = import.meta.env?.VITE_RESEND_API_KEY;
-  if (resendApiKey) {
-    try {
-      const isEditOtp = itemType === 'Transaction Edit';
-      const actionText = isEditOtp
-        ? (field
-            ? `You requested to unlock the <strong style="color: #c084fc;">${field}</strong> field to edit transaction: <strong style="color: #a855f7;">${itemName || 'Transaction'}</strong>.`
-            : `You requested to unlock and correct transaction: <strong style="color: #a855f7;">${itemName || 'Transaction'}</strong>.`)
-        : `You requested to permanently delete <strong>${itemName || 'Item'}</strong> (${itemType || 'Record'}).`;
-      const subjectText = isEditOtp
-        ? `🔐 Money Control — Unlock ${field ? field + ' ' : ''}Verification: ${otp}`
-        : `🔐 Money Control Verification Code: ${otp}`;
-
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${resendApiKey}`
-        },
-        body: JSON.stringify({
-          from: import.meta.env?.VITE_EMAIL_FROM || 'Money Control <security@moneycontrol.app>',
-          to: [email],
-          subject: subjectText,
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0d1b; color: #f1f5f9; padding: 32px; border-radius: 16px; max-width: 500px; margin: 0 auto; border: 1px solid #2d2640;">
-              <h2 style="color: #c084fc; margin-top: 0;">🔐 Security Verification</h2>
-              <p style="color: #94a3b8; font-size: 15px; line-height: 1.5;">
-                ${actionText}
-              </p>
-              <p style="color: #94a3b8; font-size: 14px;">Your one-time verification code is:</p>
-              <div style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #a855f7; background: #1a162b; border: 1px solid #3b2d54; padding: 20px; border-radius: 12px; text-align: center; margin: 20px 0;">
-                ${otp}
-              </div>
-              <p style="color: #64748b; font-size: 13px; line-height: 1.4;">
-                ⚠️ This code expires in 5 minutes. Never share this code with anyone. If you did not make this request, please log in and change your password immediately.
-              </p>
-            </div>
-          `
-        })
-      });
-      if (res.ok) {
-        return { success: true, via: 'resend' };
-      }
-    } catch (e) {
-      console.warn('Resend API dispatch failed:', e);
-    }
-  }
-
-  return { success: true, via: 'simulated' };
 }
+

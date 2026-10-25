@@ -79,6 +79,12 @@ export async function createDeleteSession({ uid, targetId, targetName, targetTyp
     throw new Error('User ID and Target ID are required to initialize delete session.');
   }
 
+  const cleanEmail = String(userEmail || '').trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+    throw new Error('A valid registered email address is required to receive verification code.');
+  }
+
   const otp = generateOtpCode();
   const salt = generateSalt();
   const hashedOtp = await hashOtp(otp, salt);
@@ -104,11 +110,16 @@ export async function createDeleteSession({ uid, targetId, targetName, targetTyp
 
   // Dispatch OTP email
   const emailResult = await sendOtpEmailNotification({
-    email: userEmail,
+    email: cleanEmail,
     otp,
     itemName: targetName,
     itemType: targetType
   });
+
+  if (!emailResult.success || !emailResult.delivered) {
+    await deleteDoc(sessionRef).catch(() => {});
+    throw new Error(emailResult.error || 'Unable to send OTP. Please try again.');
+  }
 
   return { expiresAt, emailResult };
 }

@@ -148,6 +148,10 @@ export function requestSecureDelete({
             Cancel
           </button>
         </div>
+
+        <p style="font-size: 0.75rem; color: var(--text-tertiary); text-align: center; margin: 12px 0 0; line-height: 1.4;">
+          💡 Didn't receive the email? Check your <strong>Spam</strong>, <strong>Promotions</strong>, or <strong>All Mail</strong> folders.
+        </p>
       </div>
     `;
   }
@@ -202,7 +206,7 @@ export function requestSecureDelete({
         continueBtn.innerHTML = '<span class="spinner"></span> Sending OTP...';
 
         try {
-          const sessionResult = await createDeleteSession({
+          await createDeleteSession({
             uid,
             targetId,
             targetName: itemName,
@@ -210,21 +214,14 @@ export function requestSecureDelete({
             userEmail
           });
 
-          // Check if email was delivered or if running in dev simulation mode
-          const emailDetails = sessionResult?.emailResult?.details;
-          if (emailDetails?.delivered) {
-            toast.success(`📧 Verification code sent to ${maskedEmail}`);
-          } else if (emailDetails?.error) {
-            toast.warning(`⚠️ Email delivery issue: ${emailDetails.error}. Check terminal console for OTP.`);
-          } else {
-            toast.info(`🔐 OTP generated! Check your email or terminal console.`);
-          }
+          // Show accurate success status message only after email delivery confirmed
+          toast.success('OTP sent successfully! Check your email.');
 
           // Transition to Step 2 within the exact same modal (no closeModal to prevent premature onClose)
           renderStep2InModal(modal);
         } catch (err) {
           console.error('Error generating delete session:', err);
-          toast.error(err.message || 'Unable to generate verification OTP. Please try again.');
+          toast.error('Unable to send OTP. Please try again.');
           continueBtn.disabled = false;
           continueBtn.innerHTML = 'Continue';
         }
@@ -311,7 +308,7 @@ export function requestSecureDelete({
         if (verifyBtn) verifyBtn.disabled = true;
 
         try {
-          const sessionResult = await createDeleteSession({
+          await createDeleteSession({
             uid,
             targetId,
             targetName: itemName,
@@ -319,17 +316,13 @@ export function requestSecureDelete({
             userEmail
           });
 
-          const emailDetails = sessionResult?.emailResult?.details;
-          if (emailDetails?.delivered) {
-            toast.success(`📧 New verification code sent to ${maskedEmail}`);
-          } else {
-            toast.info('New verification code generated! Check your email or terminal.');
-          }
-
+          toast.success('OTP sent successfully! Check your email.');
           startTimer();
         } catch (err) {
           console.error('Error resending OTP:', err);
-          if (errorEl) errorEl.textContent = 'Unable to resend OTP. Please try again.';
+          const msg = err.message?.includes('Please wait') ? err.message : 'Unable to send OTP. Please try again.';
+          toast.error(msg);
+          if (errorEl) errorEl.textContent = msg;
           resendBtn.disabled = false;
         }
       };

@@ -33,6 +33,12 @@ export async function createFieldEditSession({ uid, transactionId, field, fieldL
     throw new Error('User ID, Transaction ID, and Field name are required to initialize verification session.');
   }
 
+  const cleanEmail = String(userEmail || '').trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+    throw new Error('A valid registered email address is required to receive verification code.');
+  }
+
   const cleanField = String(field).toLowerCase().trim();
   const displayLabel = fieldLabel || (cleanField.charAt(0).toUpperCase() + cleanField.slice(1));
   const sessionId = `${transactionId}_${cleanField}`;
@@ -81,12 +87,18 @@ export async function createFieldEditSession({ uid, transactionId, field, fieldL
 
   // Dispatch OTP email with field-specific context
   const emailResult = await sendOtpEmailNotification({
-    email: userEmail,
+    email: cleanEmail,
     otp,
     itemName: transactionName || 'Transaction',
     itemType: 'Transaction Edit',
     field: displayLabel
   });
+
+  if (!emailResult.success || !emailResult.delivered) {
+    // Delivery failed: immediately delete the unverified session document so the user can retry without cooldown
+    await deleteDoc(sessionRef).catch(() => {});
+    throw new Error(emailResult.error || 'Unable to send OTP. Please try again.');
+  }
 
   return { expiresAt, emailResult };
 }

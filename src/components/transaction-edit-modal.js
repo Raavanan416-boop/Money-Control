@@ -5,6 +5,7 @@
 
 import { openModal, closeModal } from './modal.js';
 import { maskEmail } from '../services/secure-delete.js';
+import { auth } from '../config/firebase.js';
 import {
   createFieldEditSession,
   verifyFieldEditOtp,
@@ -53,8 +54,8 @@ function extractTimeValue(tx) {
 export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
   let currentType = tx.type || 'EXPENSE';
   const accounts = state.accounts || [];
-  const uid = state.user?.uid;
-  const userEmail = state.user?.email || state.profile?.email || '';
+  const uid = state.user?.uid || auth?.currentUser?.uid;
+  const userEmail = (state.user?.email || state.profile?.email || auth?.currentUser?.email || '').trim();
 
   // Deep clone the original tx for comparison and rollback
   const originalTx = JSON.parse(JSON.stringify(tx));
@@ -350,6 +351,10 @@ export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
             <button type="button" id="btn-verify-edit-otp" class="btn btn-primary btn-block" disabled style="min-height: 44px;">
               ✅ Verify OTP
             </button>
+
+            <p style="font-size: 0.75rem; color: var(--text-tertiary); text-align: center; margin: 12px 0 0; line-height: 1.4;">
+              💡 Didn't receive the email? Check your <strong>Spam</strong>, <strong>Promotions</strong>, or <strong>All Mail</strong> folders.
+            </p>
           </div>
 
           <button type="button" id="btn-cancel-edit-otp" class="btn btn-ghost btn-block" style="margin-top: 8px; min-height: 40px;">
@@ -399,7 +404,7 @@ export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
         sendBtn.innerHTML = '<span class="spinner"></span> Sending OTP...';
 
         try {
-          const sessionResult = await createFieldEditSession({
+          await createFieldEditSession({
             uid,
             transactionId: tx.id,
             field,
@@ -408,14 +413,8 @@ export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
             userEmail
           });
 
-          const emailDetails = sessionResult?.emailResult?.details;
-          if (emailDetails?.delivered) {
-            toast.success(`📧 Verification code sent to ${maskedEmailStr}`);
-          } else if (emailDetails?.error) {
-            toast.warning(`⚠️ Delivery warning: check terminal console for code.`);
-          } else {
-            toast.info(`🔐 Verification code generated for ${displayField}! Check your email.`);
-          }
+          // Show accurate success status message only after email delivery confirmed
+          toast.success('OTP sent successfully! Check your email.');
 
           if (sendSection) sendSection.style.display = 'none';
           if (inputSection) inputSection.style.display = 'block';
@@ -425,8 +424,9 @@ export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
           }
           startTimer();
         } catch (err) {
-          console.error('Error creating field edit session:', err);
-          toast.error(err.message || 'Unable to send verification code. Please try again.');
+          console.error('Error sending field edit OTP:', err);
+          const msg = err.message?.includes('Please wait') ? err.message : 'Unable to send OTP. Please try again.';
+          toast.error(msg);
           sendBtn.disabled = false;
           sendBtn.innerHTML = '📧 Send OTP';
         }
@@ -461,7 +461,7 @@ export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
         if (verifyBtn) verifyBtn.disabled = true;
 
         try {
-          const sessionResult = await createFieldEditSession({
+          await createFieldEditSession({
             uid,
             transactionId: tx.id,
             field,
@@ -470,16 +470,13 @@ export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
             userEmail
           });
 
-          const emailDetails = sessionResult?.emailResult?.details;
-          if (emailDetails?.delivered) {
-            toast.success(`📧 New code sent to ${maskedEmailStr}`);
-          } else {
-            toast.info(`New code generated for ${displayField}!`);
-          }
+          toast.success('OTP sent successfully! Check your email.');
           startTimer();
         } catch (err) {
           console.error('Error resending edit OTP:', err);
-          if (errorEl) errorEl.textContent = err.message || 'Unable to resend OTP. Please try again.';
+          const msg = err.message?.includes('Please wait') ? err.message : 'Unable to send OTP. Please try again.';
+          toast.error(msg);
+          if (errorEl) errorEl.textContent = msg;
           resendBtn.disabled = false;
         }
       };

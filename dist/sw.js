@@ -1,13 +1,13 @@
 // ============================================
 // 💰 Money Control — Service Worker
 // Auto-updating cache strategy
-// BUILD: 1791991471611
+// BUILD: 1792928220515
 // ============================================
 
 // Cache name includes build version — changes on every Vite build.
 // When a new SW activates, it evicts the old cache (different version string)
 // and all clients reload via the SW_UPDATED broadcast.
-const CACHE_VERSION = '1791991471611';
+const CACHE_VERSION = '1792928220515';
 const CACHE_NAME = 'money-control-' + CACHE_VERSION;
 
 // Only cache the true static shell — manifest and icons.
