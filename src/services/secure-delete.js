@@ -3,7 +3,7 @@
 // ============================================
 
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
-import { getDb } from '../config/firebase.js';
+import { getDb, auth } from '../config/firebase.js';
 import { sendOtpEmailNotification } from './email.js';
 
 /**
@@ -79,6 +79,11 @@ export async function createDeleteSession({ uid, targetId, targetName, targetTyp
     throw new Error('User ID and Target ID are required to initialize delete session.');
   }
 
+  const currentAuthUser = auth.currentUser;
+  if (!currentAuthUser || currentAuthUser.uid !== uid) {
+    throw new Error('Your session expired. Please sign in again.');
+  }
+
   const cleanEmail = String(userEmail || '').trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!cleanEmail || !emailRegex.test(cleanEmail)) {
@@ -138,6 +143,11 @@ export async function verifyDeleteOtp({ uid, targetId, enteredOtp }) {
     return { success: false, error: 'Invalid verification session.' };
   }
 
+  const currentAuthUser = auth.currentUser;
+  if (!currentAuthUser || currentAuthUser.uid !== uid) {
+    return { success: false, error: 'Your session expired. Please sign in again.' };
+  }
+
   const cleanOtp = String(enteredOtp || '').trim();
   if (cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
     return { success: false, error: 'Please enter a valid 6-digit OTP.' };
@@ -174,7 +184,7 @@ export async function verifyDeleteOtp({ uid, targetId, enteredOtp }) {
     } catch (e) {
       console.warn('Failed to increment attempt count:', e);
     }
-    return { success: false, error: 'Incorrect OTP. Please try again.' };
+    return { success: false, error: 'OTP verification failed. Please check the code.' };
   }
 
   // Mark session verified with 60s deletion window
@@ -196,7 +206,11 @@ export async function cleanupDeleteSession(uid, targetId) {
   try {
     const db = getDb();
     const sessionRef = doc(db, 'users', uid, 'deleteSessions', targetId);
-    await deleteDoc(sessionRef);
+    await deleteDoc(sessionRef).catch(() => {});
+    if (typeof targetId === 'string' && !targetId.startsWith('budget-')) {
+      const prefixedRef = doc(db, 'users', uid, 'deleteSessions', `budget-${targetId}`);
+      await deleteDoc(prefixedRef).catch(() => {});
+    }
   } catch (e) {
     console.warn('cleanupDeleteSession warning:', e);
   }

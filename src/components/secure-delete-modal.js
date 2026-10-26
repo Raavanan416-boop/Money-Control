@@ -42,7 +42,7 @@ export function requestSecureDelete({
   const maskedEmail = maskEmail(userEmail || 'user@example.com');
   let resendTimer = null;
   let countdownSeconds = 30;
-  let isVerified = false;
+  let isCompleted = false;
 
   function clearActiveTimer() {
     if (resendTimer) {
@@ -220,8 +220,14 @@ export function requestSecureDelete({
           // Transition to Step 2 within the exact same modal (no closeModal to prevent premature onClose)
           renderStep2InModal(modal);
         } catch (err) {
-          console.error('Error generating delete session:', err);
-          toast.error(err.message || 'Unable to send OTP. Please try again.');
+          console.error(`[SecureDelete] Session creation failed: code=${err?.code || 'UNKNOWN'}, operation=create_${itemType ? itemType.toLowerCase() : 'budget'}_session`);
+          let errorMsg = err?.message || 'Unable to send OTP. Please try again.';
+          if (err?.code === 'permission-denied') {
+            errorMsg = `You do not have permission to delete this ${itemType ? itemType.toLowerCase() : 'budget'}.`;
+          } else if (err?.code === 'unauthenticated' || err?.message?.includes('session expired')) {
+            errorMsg = 'Your session expired. Please sign in again.';
+          }
+          toast.error(errorMsg);
           continueBtn.disabled = false;
           continueBtn.innerHTML = 'Continue';
         }
@@ -336,11 +342,14 @@ export function requestSecureDelete({
     }
 
     // 8. Verify & Delete Handler
+    let isProcessing = false;
     if (verifyBtn) {
       verifyBtn.onclick = async () => {
+        if (isProcessing) return;
         const code = otpInput ? otpInput.value.trim() : '';
         if (code.length !== 6) return;
 
+        isProcessing = true;
         verifyBtn.disabled = true;
         verifyBtn.innerHTML = '<span class="spinner"></span> Verifying OTP...';
         if (errorEl) errorEl.textContent = '';
@@ -349,17 +358,17 @@ export function requestSecureDelete({
           const result = await verifyDeleteOtp({ uid, targetId, enteredOtp: code });
 
           if (!result.success) {
-            if (errorEl) errorEl.textContent = result.error || 'Incorrect OTP. Please try again.';
+            isProcessing = false;
+            if (errorEl) errorEl.textContent = result.error || 'OTP verification failed. Please check the code.';
             verifyBtn.disabled = false;
             verifyBtn.innerHTML = 'Verify OTP';
             return;
           }
 
-          // Flag verified so onClose doesn't trigger cleanup prematurely
-          isVerified = true;
           verifyBtn.innerHTML = '<span class="spinner"></span> Deleting permanently...';
 
           await onVerifyAndDelete();
+          isCompleted = true;
           await cleanupDeleteSession(uid, targetId);
           clearActiveTimer();
           closeModal();
@@ -367,8 +376,19 @@ export function requestSecureDelete({
           // Final Success Notification
           toast.success(`✅ Deleted Successfully\n"${itemName}" has been permanently deleted.`);
         } catch (err) {
-          console.error('Delete error post-verification:', err);
-          if (errorEl) errorEl.textContent = err.message || 'Failed to complete deletion. Please try again.';
+          isProcessing = false;
+          console.error(`[SecureDelete] Deletion failed: code=${err?.code || 'UNKNOWN'}, operation=delete_${itemType ? itemType.toLowerCase() : 'budget'}`);
+
+          let displayMsg = 'Budget deletion failed. Your data has not been removed.';
+          if (err?.code === 'permission-denied' || (err?.message && err.message.toLowerCase().includes('permission'))) {
+            displayMsg = `You do not have permission to delete this ${itemType ? itemType.toLowerCase() : 'budget'}.`;
+          } else if (err?.code === 'unauthenticated' || (err?.message && (err.message.includes('session expired') || err.message.includes('sign in')))) {
+            displayMsg = 'Your session expired. Please sign in again.';
+          } else if (err?.message && !err.message.includes('Firebase: Error') && !err.message.includes('Missing or insufficient permissions')) {
+            displayMsg = err.message;
+          }
+
+          if (errorEl) errorEl.textContent = displayMsg;
           verifyBtn.disabled = false;
           verifyBtn.innerHTML = 'Verify OTP';
         }
@@ -385,8 +405,8 @@ export function requestSecureDelete({
     },
     onClose: () => {
       clearActiveTimer();
-      // Only clean up session and display cancel toast if deletion was NOT verified & completed
-      if (!isVerified) {
+      // Only clean up session and display cancel toast if deletion was NOT completed
+      if (!isCompleted) {
         cleanupDeleteSession(uid, targetId);
         toast.info('Deletion cancelled.');
       }

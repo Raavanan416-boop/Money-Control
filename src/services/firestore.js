@@ -17,7 +17,7 @@ import {
   writeBatch,
   deleteField
 } from 'firebase/firestore';
-import { db, getDb } from '../config/firebase.js';
+import { db, getDb, auth } from '../config/firebase.js';
 import { calculateAccountHistory } from '../utils/calculations.js';
 
 function firestoreDb() {
@@ -439,6 +439,21 @@ export async function getBudgets(uid) {
 }
 
 export async function deleteBudget(uid, budgetId) {
-  if (!uid || !budgetId) return;
-  await deleteDoc(doc(firestoreDb(), 'users', uid, 'budgets', budgetId));
+  if (!uid || !budgetId) {
+    throw new Error('User ID and Budget ID are required.');
+  }
+  const authUser = auth.currentUser;
+  if (!authUser || authUser.uid !== uid) {
+    const err = new Error('You do not have permission to delete this budget.');
+    err.code = 'permission-denied';
+    throw err;
+  }
+  const budgetRef = doc(firestoreDb(), 'users', uid, 'budgets', budgetId);
+  const budgetSnap = await getDoc(budgetRef);
+  if (!budgetSnap.exists()) {
+    const err = new Error('Budget not found or already deleted.');
+    err.code = 'not-found';
+    throw err;
+  }
+  await deleteDoc(budgetRef);
 }

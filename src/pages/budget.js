@@ -7,6 +7,7 @@ import { calculateBudgetProgress, saveMonthlyBudget, saveCategoryBudget, removeB
 import { openModal, closeModal, showConfirm } from '../components/modal.js';
 import { requestSecureDelete } from '../components/secure-delete-modal.js';
 import { toast } from '../utils/toast.js';
+import { auth } from '../config/firebase.js';
 
 let state = {
   user: null,
@@ -125,17 +126,37 @@ export function attachBudgetListeners(refreshData) {
   // Delete budget buttons
   document.querySelectorAll('.btn-delete-budget').forEach(btn => {
     btn.onclick = () => {
+      const currentUser = auth.currentUser;
+      const effectiveUid = currentUser?.uid || state.user?.uid;
+      if (!currentUser || !effectiveUid) {
+        toast.error('Your session expired. Please sign in again.');
+        return;
+      }
+
       const category = btn.dataset.category;
+      if (!category) return;
+
+      const userEmail = currentUser.email || state.user?.email || (state.profile && state.profile.email) || '';
+      let hasDeleted = false;
+
       requestSecureDelete({
         title: 'Delete Budget?',
         itemType: 'Budget',
         itemName: category,
-        targetId: `budget-${category}`,
+        targetId: category,
         impactMessage: `Your monthly budget tracking for "${category}" will be permanently removed.`,
-        uid: state.user.uid,
-        userEmail: state.user?.email || (state.profile && state.profile.email) || '',
+        uid: effectiveUid,
+        userEmail,
         onVerifyAndDelete: async () => {
-          await removeBudget(state.user.uid, category);
+          if (hasDeleted) return;
+          hasDeleted = true;
+          const authUser = auth.currentUser;
+          if (!authUser || authUser.uid !== effectiveUid) {
+            const err = new Error('Your session expired. Please sign in again.');
+            err.code = 'unauthenticated';
+            throw err;
+          }
+          await removeBudget(effectiveUid, category);
           if (refreshData) await refreshData();
         }
       });

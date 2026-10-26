@@ -3,6 +3,7 @@
 // ============================================
 
 import { setBudget, getBudgets, deleteBudget } from './firestore.js';
+import { auth } from '../config/firebase.js';
 
 /**
  * Calculate budget progress for a given month
@@ -117,5 +118,14 @@ export async function getUserBudgets(uid) {
  * Remove a budget
  */
 export async function removeBudget(uid, budgetId) {
+  if (!uid || !budgetId) {
+    throw new Error('User ID and Budget ID are required.');
+  }
+  const authUser = auth.currentUser;
+  if (!authUser || authUser.uid !== uid) {
+    const err = new Error('You do not have permission to delete this budget.');
+    err.code = 'permission-denied';
+    throw err;
+  }
   await deleteBudget(uid, budgetId);
 }
