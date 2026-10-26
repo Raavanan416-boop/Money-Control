@@ -75,6 +75,15 @@ function renderTimelineRow(tx, accounts, isLast) {
     ? `<span class="tl-notes-badge">${escapeHtml(tx.notes)}</span>`
     : '';
 
+  let syncBadge = '';
+  if (tx.syncStatus === 'pending') {
+    syncBadge = `<span class="tx-sync-badge pending" title="Saved locally on device · Waiting to sync">🟡 Pending</span>`;
+  } else if (tx.syncStatus === 'syncing') {
+    syncBadge = `<span class="tx-sync-badge syncing" title="Syncing with Firebase...">🔵 Syncing</span>`;
+  } else if (tx.syncStatus === 'failed') {
+    syncBadge = `<span class="tx-sync-badge offline" title="Sync failed · Will retry">🔴 Retry</span>`;
+  }
+
   return `
     <div class="tl-row animate-fade-in" data-tx-id="${tx.id}">
       <div class="tl-spine">
@@ -83,7 +92,7 @@ function renderTimelineRow(tx, accounts, isLast) {
       </div>
       <div class="tl-icon tl-icon--${typeKey}" aria-hidden="true">${icon}</div>
       <div class="tl-details">
-        <div class="tl-title">${title}</div>
+        <div class="tl-title">${title}${syncBadge}</div>
         <div class="tl-meta">${escapeHtml(subtitle)}${notesBadge}</div>
       </div>
       <div class="tl-right">

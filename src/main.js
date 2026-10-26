@@ -2,16 +2,18 @@
 // 💰 Money Control V3 — Application Entry Point & Router
 // ============================================
 
-import { onAuthChange, getCurrentUser } from './services/auth.js';
+import { onAuthChange, getCurrentUser, getCachedUser } from './services/auth.js';
 import {
   getUserProfile,
   createUserProfile,
   subscribeToAccounts,
   subscribeToTransactions,
-  ensureDefaultAccounts
+  ensureDefaultAccounts,
+  getAccounts
 } from './services/firestore.js';
 import { getUserBudgets } from './services/budget.js';
 import { initPWA } from './services/pwa.js';
+import { initSyncEngine } from './services/sync-engine.js';
 import { getPinData } from './services/pin.js';
 import {
   showPinSetupPrompt,
@@ -99,6 +101,13 @@ try {
   console.warn('PWA initialization warning:', e);
 }
 
+// Initialize Sync Engine (runs in background, responds to online/offline events)
+try {
+  initSyncEngine();
+} catch (e) {
+  console.warn('Sync engine initialization warning:', e);
+}
+
 const appEl = document.getElementById('app');
 
 /**
@@ -125,26 +134,34 @@ function renderAuthInitView() {
  * Main Initialization Routine
  */
 function init() {
-  // Show branded loading screen immediately while Firebase restores session
+  // Show branded loading screen immediately while session is restored
   renderAuthInitView();
 
-  onAuthChange(async (user) => {
-    appState.authLoading = false;
+  let sessionInitialized = false;
+  const cachedUser = getCachedUser();
 
-    if (appState.unsubscribeAccounts) {
-      appState.unsubscribeAccounts();
-      appState.unsubscribeAccounts = null;
-    }
-    if (appState.unsubscribeTx) {
-      appState.unsubscribeTx();
-      appState.unsubscribeTx = null;
-    }
-    if (appState.unsubscribeFriendMoney) {
-      appState.unsubscribeFriendMoney();
-      appState.unsubscribeFriendMoney = null;
-    }
-
+  async function handleUserSession(user) {
     if (!user) {
+      // If we are offline and have a cached user, do NOT sign out!
+      if (typeof navigator !== 'undefined' && !navigator.onLine && cachedUser) {
+        console.log('[Auth] App offline — maintaining cached user session:', cachedUser.uid);
+        return;
+      }
+
+      appState.authLoading = false;
+      if (appState.unsubscribeAccounts) {
+        appState.unsubscribeAccounts();
+        appState.unsubscribeAccounts = null;
+      }
+      if (appState.unsubscribeTx) {
+        appState.unsubscribeTx();
+        appState.unsubscribeTx = null;
+      }
+      if (appState.unsubscribeFriendMoney) {
+        appState.unsubscribeFriendMoney();
+        appState.unsubscribeFriendMoney = null;
+      }
+
       appState.user = null;
       appState.profile = null;
       appState.accounts = [];
@@ -161,6 +178,28 @@ function init() {
       return;
     }
 
+    // Guard: If already initialized with this exact user UID, just update user reference without reloading whole UI
+    if (sessionInitialized && appState.user?.uid === user.uid) {
+      appState.user = user;
+      return;
+    }
+
+    sessionInitialized = true;
+    appState.authLoading = false;
+
+    if (appState.unsubscribeAccounts) {
+      appState.unsubscribeAccounts();
+      appState.unsubscribeAccounts = null;
+    }
+    if (appState.unsubscribeTx) {
+      appState.unsubscribeTx();
+      appState.unsubscribeTx = null;
+    }
+    if (appState.unsubscribeFriendMoney) {
+      appState.unsubscribeFriendMoney();
+      appState.unsubscribeFriendMoney = null;
+    }
+
     appState.user = user;
     renderLoadingView();
 
@@ -171,7 +210,40 @@ function init() {
       appState.dashboardError = err;
       renderAppLayout();
     }
-  });
+  }
+
+  // Fast offline recovery: If offline and cached user exists, activate immediately!
+  const isCurrentlyOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+  if (isCurrentlyOffline && cachedUser) {
+    console.log('[Auth] Restoring session from offline cache immediately:', cachedUser.uid);
+    handleUserSession(cachedUser);
+  } else {
+    // Online safety fallback timeout: if Firebase onAuthStateChanged takes longer than 1200ms
+    const authTimeout = setTimeout(() => {
+      if (sessionInitialized) return;
+      console.warn('[Auth] Auth state restoration timed out — checking cached session');
+      const fallbackUser = getCurrentUser() || cachedUser;
+      if (fallbackUser) {
+        handleUserSession(fallbackUser);
+      } else if (!sessionInitialized) {
+        handleUserSession(null);
+      }
+    }, 1200);
+
+    onAuthChange(async (user) => {
+      clearTimeout(authTimeout);
+      await handleUserSession(user);
+    });
+  }
+
+  // Ensure onAuthChange is also attached when offline so reconnection updates state
+  if (isCurrentlyOffline && cachedUser) {
+    onAuthChange(async (user) => {
+      if (user) {
+        await handleUserSession(user);
+      }
+    });
+  }
 
   window.addEventListener('hashchange', handleRoute);
 
@@ -182,6 +254,18 @@ function init() {
   // Lock app event (from settings/profile)
   window.addEventListener('lock-app', () => {
     lockApp();
+  });
+
+  // Re-render after successful background sync (sync engine fires this)
+  window.addEventListener('local-data-refreshed', async () => {
+    if (!appState.user || appState.isLocked) return;
+    try {
+      // Reload transactions and accounts from IndexedDB/Firestore to get synced data
+      appState.budgets = await getUserBudgets(appState.user.uid).catch(() => appState.budgets);
+      renderAppLayout();
+    } catch (e) {
+      // Non-fatal — layout will refresh on next subscription update
+    }
   });
 
   // Track user activity for auto-lock
@@ -195,8 +279,11 @@ async function loadUserData(uid) {
   appState.dashboardError = null;
 
   try {
-    const profileTimeout = new Promise((resolve) => setTimeout(() => resolve(null), 3000));
+    const profileTimeout = new Promise((resolve) => setTimeout(() => resolve(null), 1500));
     let profile = await Promise.race([getUserProfile(uid), profileTimeout]);
+
+    // Check existing accounts locally
+    const existingAccounts = await getAccounts(uid).catch(() => []);
 
     // Safely auto-create user profile if missing or timed out
     if (!profile) {
@@ -214,17 +301,24 @@ async function loadUserData(uid) {
       }
     }
 
+    // If profile has no initialBalance, but user already has accounts, they completed onboarding!
+    if (profile && (profile.initialBalance === null || profile.initialBalance === undefined)) {
+      if (existingAccounts && existingAccounts.length > 0) {
+        profile.initialBalance = 0;
+      }
+    }
+
     appState.profile = profile;
 
-    // Check if onboarding is needed
-    if (!profile || profile.initialBalance === null || profile.initialBalance === undefined) {
+    // Check if onboarding is needed (only if user has NO accounts and NO initial balance)
+    if ((!profile || profile.initialBalance === null || profile.initialBalance === undefined) && (!existingAccounts || existingAccounts.length === 0)) {
       renderOnboardingView();
       return;
     }
 
     // Ensure default Cash account exists
     try {
-      await ensureDefaultAccounts(uid, profile.initialBalance);
+      await ensureDefaultAccounts(uid, profile.initialBalance || 0);
     } catch (e) {
       console.warn('ensureDefaultAccounts warning:', e);
     }

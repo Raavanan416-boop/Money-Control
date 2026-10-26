@@ -17,6 +17,37 @@ import {
 import { auth, validateFirebaseConfig } from '../config/firebase.js';
 import { createUserProfile, deleteUserData } from './firestore.js';
 
+const AUTH_CACHE_KEY = 'mc_auth_user';
+
+/**
+ * Get synchronously cached user from localStorage
+ */
+export function getCachedUser() {
+  try {
+    const raw = localStorage.getItem(AUTH_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Save or clear cached user in localStorage
+ */
+export function setCachedUser(user) {
+  try {
+    if (user && user.uid) {
+      localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || ''
+      }));
+    } else {
+      localStorage.removeItem(AUTH_CACHE_KEY);
+    }
+  } catch (e) {}
+}
+
 /**
  * Register a new user with email/password and create Firestore profile
  */
@@ -61,7 +92,11 @@ export async function register(name, email, password) {
     }, 12000);
   });
 
-  return await Promise.race([regPromise, timeoutPromise]);
+  const user = await Promise.race([regPromise, timeoutPromise]);
+  if (user) {
+    setCachedUser(user);
+  }
+  return user;
 }
 
 /**
@@ -88,13 +123,21 @@ export async function login(email, password) {
     }, 12000);
   });
 
-  return await Promise.race([loginPromise, timeoutPromise]);
+  const user = await Promise.race([loginPromise, timeoutPromise]);
+  if (user) {
+    setCachedUser(user);
+  }
+  return user;
 }
 
 /**
  * Logout the current user
  */
 export async function logout() {
+  setCachedUser(null);
+  try {
+    sessionStorage.clear();
+  } catch (e) {}
   await signOut(auth);
 }
 
@@ -106,10 +149,18 @@ export async function resetPassword(email) {
 }
 
 /**
- * Listen for authentication state changes
+ * Listen for authentication state changes (with offline user caching)
  */
 export function onAuthChange(callback) {
-  return onAuthStateChanged(auth, callback);
+  return onAuthStateChanged(auth, (user) => {
+    if (user) {
+      setCachedUser(user);
+    } else if (typeof navigator !== 'undefined' && navigator.onLine) {
+      // Only clear cached user if we are online and Firebase genuinely reported null
+      setCachedUser(null);
+    }
+    callback(user);
+  });
 }
 
 /**

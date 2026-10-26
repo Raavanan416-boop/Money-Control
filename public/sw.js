@@ -14,6 +14,8 @@ const CACHE_NAME = 'money-control-' + CACHE_VERSION;
 // JS/CSS bundles are NOT pre-cached here; they carry a content hash in their
 // filename so cache-first is safe and they are cached on first fetch.
 const STATIC_ASSETS = [
+  '/',
+  '/index.html',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png'
@@ -107,14 +109,15 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => {
-          // Offline fallback — return cached index.html if available
-          return caches.match('/index.html').then(
-            (cached) => cached || new Response('Offline — please reconnect.', {
-              status: 503,
-              headers: { 'Content-Type': 'text/plain' }
-            })
-          );
+        .catch(async () => {
+          // Offline fallback — return cached index.html or root
+          const cached = (await caches.match(request)) ||
+            (await caches.match('/index.html')) ||
+            (await caches.match('/'));
+          return cached || new Response('Offline — please reconnect.', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain' }
+          });
         })
     );
     return;

@@ -2,6 +2,8 @@
 // 💰 Money Control V3 — PWA Service
 // ============================================
 
+import { syncPendingOperations } from './sync-engine.js';
+
 let deferredPrompt = null;
 let isInstalled = false;
 
@@ -28,13 +30,11 @@ export function initPWA() {
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
 
-  const isLocalhost =
-    location.hostname === 'localhost' ||
-    location.hostname === '127.0.0.1' ||
-    location.hostname === '::1';
+  const isDev = Boolean(import.meta.env?.DEV);
+  const allowSWInDev = window.location.search.includes('sw=1') || window.location.search.includes('pwa=1');
 
-  if (isLocalhost) {
-    // On localhost: unregister all SWs so dev changes are always live
+  if (isDev && !allowSWInDev) {
+    // In local dev mode (HMR): unregister service workers unless explicitly testing (?sw=1)
     navigator.serviceWorker.getRegistrations().then((registrations) => {
       for (const reg of registrations) reg.unregister();
     }).catch((err) => console.warn('[PWA] SW unregister warning:', err));
@@ -217,20 +217,22 @@ function hideInstallBanner() {
  */
 function setupOfflineDetection() {
   const updateStatus = () => {
-    const offlineBanner = document.getElementById('offline-banner');
-    if (!offlineBanner) return;
+    const isOff = !navigator.onLine;
+    const offlineBanners = document.querySelectorAll('#offline-banner, .dashboard-offline-banner');
 
-    if (!navigator.onLine) {
-      offlineBanner.innerHTML = `
-        <div class="offline-content">
-          <span class="offline-icon">📡</span>
-          <span class="offline-text">You're offline — Reconnect to save new transactions securely.</span>
-        </div>
-      `;
-      offlineBanner.classList.add('show');
-    } else {
-      offlineBanner.classList.remove('show');
-      setTimeout(() => { offlineBanner.innerHTML = ''; }, 300);
+    offlineBanners.forEach(banner => {
+      if (isOff) {
+        banner.classList.add('show');
+      } else {
+        banner.classList.remove('show');
+      }
+    });
+
+    if (!isOff) {
+      // Trigger background sync when coming back online
+      try {
+        syncPendingOperations(true).catch(() => {});
+      } catch (e) {}
     }
   };
 
@@ -238,7 +240,7 @@ function setupOfflineDetection() {
   window.addEventListener('offline', updateStatus);
 
   // Initial check
-  setTimeout(updateStatus, 1000);
+  setTimeout(updateStatus, 300);
 }
 
 /**

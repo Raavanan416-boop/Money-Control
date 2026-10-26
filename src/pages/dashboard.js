@@ -98,6 +98,14 @@ export function renderDashboardPage(state) {
         </div>
       ` : ''}
 
+      <!-- Offline Notice: Small & compact above Total Money -->
+      <div id="offline-banner" class="dashboard-offline-banner ${!isOnline() ? 'show' : ''}">
+        <span class="dashboard-offline-icon">📡</span>
+        <div class="dashboard-offline-text">
+          <strong>You're offline:</strong> Transactions are saved locally &amp; will auto-sync when you reconnect.
+        </div>
+      </div>
+
       <!-- 2. Total Money card -->
       <div class="balance-card balance-card-interactive" id="dashboard-total-money-card" tabindex="0" role="button" aria-label="View Total Money History">
         <div class="balance-label">
@@ -406,14 +414,17 @@ export function openAddTransactionModal(type = 'INCOME', onSaveSuccess) {
   const today = getTodayDate();
   const todayDisplay = getLocalDateDisplay();
 
-  // Check offline
-  if (!isOnline()) {
-    toast.warning('📡 You\'re offline — Reconnect to save new transactions securely.');
-    return;
-  }
+
+  // Note: offline transactions are saved locally and auto-synced when back online
+  const offlineNote = !isOnline() ? `
+    <div class="offline-local-note" style="display:flex;align-items:center;gap:8px;background:rgba(245,158,11,0.10);border:1.5px solid rgba(245,158,11,0.28);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:0.875rem;color:#f59e0b;">
+      <span style="font-size:1.1rem;">📡</span>
+      <span>You're offline — transaction will be saved locally and auto-synced when you reconnect.</span>
+    </div>` : '';
 
   const content = `
     <form id="tx-modal-form" novalidate>
+      ${offlineNote}
       <div class="form-group">
         <label class="form-label" for="tx-amount">Amount (₹)</label>
         <div class="form-input-group">
@@ -620,14 +631,16 @@ export function openTransferModal(onSaveSuccess) {
   const today = getTodayDate();
   const todayDisplay = getLocalDateDisplay();
 
-  // Check offline
-  if (!isOnline()) {
-    toast.warning('📡 You\'re offline — Reconnect to save new transactions securely.');
-    return;
-  }
+  // Note: offline transfers are saved locally and auto-synced when back online
+  const offlineNote = !isOnline() ? `
+    <div class="offline-local-note" style="display:flex;align-items:center;gap:8px;background:rgba(245,158,11,0.10);border:1.5px solid rgba(245,158,11,0.28);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:0.875rem;color:#f59e0b;">
+      <span style="font-size:1.1rem;">📡</span>
+      <span>You're offline — transfer will be saved locally and auto-synced when you reconnect.</span>
+    </div>` : '';
 
   const content = `
     <form id="transfer-modal-form" novalidate>
+      ${offlineNote}
       <div class="form-group">
         <label class="form-label" for="tr-amount">Transfer Amount (₹)</label>
         <div class="form-input-group">

@@ -23,26 +23,82 @@ export async function hashPin(pin) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/**
- * Save PIN hash to Firestore
- */
-export async function savePinHash(uid, pinHashValue) {
-  await updateDoc(doc(db, 'users', uid), {
-    pinHash: pinHashValue,
-    pinEnabled: true,
-    pinSetupPromptShown: true
-  });
+function getCachedPinData(uid) {
+  try {
+    const raw = localStorage.getItem(`mc_pin_${uid}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setCachedPinData(uid, partialData) {
+  try {
+    const existing = getCachedPinData(uid) || {};
+    const updated = { ...existing, ...partialData };
+    localStorage.setItem(`mc_pin_${uid}`, JSON.stringify(updated));
+  } catch (e) {}
 }
 
 /**
- * Get PIN data from Firestore
+ * Save PIN hash to Firestore and local cache
+ */
+export async function savePinHash(uid, pinHashValue) {
+  const pinData = {
+    pinHash: pinHashValue,
+    pinEnabled: true,
+    pinSetupPromptShown: true
+  };
+  setCachedPinData(uid, pinData);
+
+  try {
+    await updateDoc(doc(db, 'users', uid), pinData);
+  } catch (e) {
+    console.warn('savePinHash Firestore sync deferred (offline):', e);
+  }
+}
+
+/**
+ * Get PIN data with instant offline cache fallback
  */
 export async function getPinData(uid) {
+  const cached = getCachedPinData(uid);
+
+  // If offline, return cached PIN data immediately
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (cached) {
+      return {
+        pinHash: cached.pinHash || null,
+        pinEnabled: !!cached.pinEnabled,
+        pinSetupPromptShown: cached.pinSetupPromptShown !== undefined ? cached.pinSetupPromptShown : false,
+        autoLockTimeout: cached.autoLockTimeout !== undefined ? cached.autoLockTimeout : 5,
+        biometricEnabled: !!cached.biometricEnabled,
+        biometricCredentialId: cached.biometricCredentialId || null,
+        hideBalance: !!cached.hideBalance,
+        pinLength: PIN_LENGTH
+      };
+    }
+    return {
+      pinHash: null,
+      pinEnabled: false,
+      pinSetupPromptShown: true, // Don't block offline users with prompt
+      autoLockTimeout: 5,
+      biometricEnabled: false,
+      biometricCredentialId: null,
+      hideBalance: false,
+      pinLength: PIN_LENGTH
+    };
+  }
+
+  // If online, attempt to fetch from Firestore with a 1500ms safety timeout
   try {
-    const docSnap = await getDoc(doc(db, 'users', uid));
+    const fetchPromise = getDoc(doc(db, 'users', uid));
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 1500));
+    const docSnap = await Promise.race([fetchPromise, timeoutPromise]);
+
     if (docSnap && docSnap.exists()) {
       const data = docSnap.data();
-      return {
+      const pinResult = {
         pinHash: data.pinHash || null,
         pinEnabled: data.pinEnabled || false,
         pinSetupPromptShown: data.pinSetupPromptShown || false,
@@ -52,10 +108,26 @@ export async function getPinData(uid) {
         hideBalance: data.hideBalance || false,
         pinLength: PIN_LENGTH
       };
+      setCachedPinData(uid, pinResult);
+      return pinResult;
     }
   } catch (e) {
-    console.warn('getPinData warning:', e);
+    console.warn('getPinData online fetch warning:', e);
   }
+
+  if (cached) {
+    return {
+      pinHash: cached.pinHash || null,
+      pinEnabled: !!cached.pinEnabled,
+      pinSetupPromptShown: cached.pinSetupPromptShown !== undefined ? cached.pinSetupPromptShown : false,
+      autoLockTimeout: cached.autoLockTimeout !== undefined ? cached.autoLockTimeout : 5,
+      biometricEnabled: !!cached.biometricEnabled,
+      biometricCredentialId: cached.biometricCredentialId || null,
+      hideBalance: !!cached.hideBalance,
+      pinLength: PIN_LENGTH
+    };
+  }
+
   return {
     pinHash: null,
     pinEnabled: false,
@@ -83,10 +155,15 @@ export async function verifyPin(pin, storedHash) {
  * Remove PIN (disable lock)
  */
 export async function removePin(uid) {
-  await updateDoc(doc(db, 'users', uid), {
-    pinHash: null,
-    pinEnabled: false
-  });
+  setCachedPinData(uid, { pinHash: null, pinEnabled: false });
+  try {
+    await updateDoc(doc(db, 'users', uid), {
+      pinHash: null,
+      pinEnabled: false
+    });
+  } catch (e) {
+    console.warn('removePin Firestore sync deferred (offline):', e);
+  }
 }
 
 /**
@@ -94,18 +171,28 @@ export async function removePin(uid) {
  * @param {number} minutes - 0 (immediately), 1, 5, 15, -1 (never)
  */
 export async function saveAutoLockTimeout(uid, minutes) {
-  await updateDoc(doc(db, 'users', uid), {
-    autoLockTimeout: minutes
-  });
+  setCachedPinData(uid, { autoLockTimeout: minutes });
+  try {
+    await updateDoc(doc(db, 'users', uid), {
+      autoLockTimeout: minutes
+    });
+  } catch (e) {
+    console.warn('saveAutoLockTimeout Firestore sync deferred (offline):', e);
+  }
 }
 
 /**
  * Mark PIN setup prompt as shown (so it doesn't re-appear)
  */
 export async function markPinPromptShown(uid) {
-  await updateDoc(doc(db, 'users', uid), {
-    pinSetupPromptShown: true
-  });
+  setCachedPinData(uid, { pinSetupPromptShown: true });
+  try {
+    await updateDoc(doc(db, 'users', uid), {
+      pinSetupPromptShown: true
+    });
+  } catch (e) {
+    console.warn('markPinPromptShown Firestore sync deferred (offline):', e);
+  }
 }
 
 // ─── Biometric / Fingerprint ──────────────────────────────
@@ -212,11 +299,16 @@ export async function verifyBiometric(uid, credentialId) {
  * @param {string} uid
  */
 export async function disableBiometric(uid) {
-  await updateDoc(doc(db, 'users', uid), {
-    biometricEnabled: false,
-    biometricCredentialId: null
-  });
+  setCachedPinData(uid, { biometricEnabled: false, biometricCredentialId: null });
   localStorage.removeItem(`mc_biometric_cred_${uid}`);
+  try {
+    await updateDoc(doc(db, 'users', uid), {
+      biometricEnabled: false,
+      biometricCredentialId: null
+    });
+  } catch (e) {
+    console.warn('disableBiometric Firestore sync deferred (offline):', e);
+  }
 }
 
 // ─── Hide Balance ──────────────────────────────
@@ -227,9 +319,14 @@ export async function disableBiometric(uid) {
  * @param {boolean} hidden
  */
 export async function saveHideBalance(uid, hidden) {
-  await updateDoc(doc(db, 'users', uid), {
-    hideBalance: hidden
-  });
+  setCachedPinData(uid, { hideBalance: hidden });
+  try {
+    await updateDoc(doc(db, 'users', uid), {
+      hideBalance: hidden
+    });
+  } catch (e) {
+    console.warn('saveHideBalance Firestore sync deferred (offline):', e);
+  }
 }
 
 // ─── Utility helpers ──────────────────────────────

@@ -5,9 +5,11 @@
 import { showConfirm } from './modal.js';
 import { logout } from '../services/auth.js';
 import { toast } from '../utils/toast.js';
+import { renderSyncStatusPill, attachSyncPillListener } from './sync-status-indicator.js';
+import { getUnsyncedCount } from '../services/local-db.js';
 
 /**
- * Render the desktop sidebar (Unchanged)
+ * Render the desktop sidebar
  */
 export function renderSidebar(activePage) {
   const links = [
@@ -27,6 +29,9 @@ export function renderSidebar(activePage) {
       <div class="sidebar-logo">
         <img src="/icon-192.png" alt="Money Control" class="sidebar-logo-icon" style="width: 32px; height: 32px; border-radius: 8px;" />
         <span class="sidebar-logo-text">Money Control</span>
+      </div>
+      <div class="sidebar-sync-container" style="padding: 0 16px 12px 16px;">
+        ${renderSyncStatusPill()}
       </div>
       <nav class="sidebar-nav">
         ${links.map(link => `
@@ -52,6 +57,9 @@ export function renderMobileHeader() {
       <div class="mobile-header-brand">
         <img src="/icon-192.png" alt="Money Control" class="mobile-header-logo" />
         <span class="mobile-header-title">Money Control</span>
+      </div>
+      <div class="mobile-header-right" style="margin-left: auto; display: flex; align-items: center;">
+        ${renderSyncStatusPill()}
       </div>
     </header>
   `;
@@ -249,11 +257,19 @@ export function attachNavListeners(navigateFn, appState) {
   if (logoutBtn) {
     logoutBtn.onclick = async () => {
       closeMobileDrawer();
+      const uid = appState?.user?.uid;
+      const unsyncedCount = uid ? await getUnsyncedCount(uid).catch(() => 0) : 0;
+
+      let message = 'Are you sure you want to log out of Money Control?';
+      if (unsyncedCount > 0) {
+        message = `⚠️ Warning: You have ${unsyncedCount} unsaved change(s) stored on this device that have not yet synced to Firebase. If you log out now, your local changes are preserved, but you will need to log back in to finish syncing. Proceed with logout?`;
+      }
+
       const confirmed = await showConfirm({
-        icon: '🚪',
-        title: 'Logout?',
-        message: 'Are you sure you want to log out of Money Control?',
-        confirmText: 'Logout',
+        icon: unsyncedCount > 0 ? '⚠️' : '🚪',
+        title: unsyncedCount > 0 ? 'Unsynced Changes Warning' : 'Logout?',
+        message,
+        confirmText: unsyncedCount > 0 ? 'Log Out Anyway' : 'Logout',
         danger: true
       });
       if (confirmed) {
@@ -262,6 +278,9 @@ export function attachNavListeners(navigateFn, appState) {
       }
     };
   }
+
+  // Attach sync pill listener
+  attachSyncPillListener();
 
   // Swipe left on drawer to close
   const drawer = document.getElementById('mobile-drawer');

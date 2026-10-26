@@ -414,37 +414,68 @@
   color: var(--text-secondary);
 }
 
-/* ===== Offline Banner ===== */
-#offline-banner {
-  position: fixed;
-  top: -60px;
-  left: 0;
-  right: 0;
-  z-index: 9997;
-  transition: top 0.3s ease;
-  pointer-events: none;
+/* ===== Compact Offline Banner (Above Total Money) ===== */
+.dashboard-offline-banner {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.08);
+  color: #fbbf24;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  transition: all 0.25s ease;
+  animation: fadeInDown 0.3s ease;
 }
 
-#offline-banner.show {
-  top: 0;
-  pointer-events: all;
+[data-theme="light"] .dashboard-offline-banner {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #b45309;
 }
 
-.offline-content {
+.dashboard-offline-banner.show {
+  display: flex;
+}
+
+.dashboard-offline-icon {
+  font-size: 1.15rem;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #fff;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  text-align: center;
+  animation: pulseOffline 2s infinite ease-in-out;
 }
 
-.offline-icon {
-  font-size: 1rem;
+.dashboard-offline-text {
+  flex: 1;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.dashboard-offline-text strong {
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+@keyframes pulseOffline {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(0.92); }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ===== Locked Date Display ===== */

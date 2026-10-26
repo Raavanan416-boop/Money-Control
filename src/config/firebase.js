@@ -4,7 +4,12 @@
 
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || "AIzaSyCNi1a6jLObH6P89o-Bpw1zpViF-iS0_-k",
@@ -46,7 +51,19 @@ try {
   console.warn('setPersistence warning:', e);
 }
 
-export const db = getFirestore(app);
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  });
+} catch (e) {
+  // If Firestore is already initialized (e.g. during HMR), use existing instance
+  firestoreInstance = getFirestore(app);
+}
+
+export const db = firestoreInstance;
 
 export function getDb() {
   return db || getFirestore(app);

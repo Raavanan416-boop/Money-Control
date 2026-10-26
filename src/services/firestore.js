@@ -1,5 +1,7 @@
 // ============================================
-// 💰 Money Control V2 — Firestore Service
+// 💰 Money Control — Firestore Service & Local-First Bridge
+// Offline-first architecture: writes to IndexedDB immediately, updates UI instantly,
+// and synchronizes to Firebase automatically with idempotent operations.
 // ============================================
 
 import {
@@ -9,7 +11,6 @@ import {
   updateDoc,
   deleteDoc,
   collection,
-  addDoc,
   query,
   orderBy,
   onSnapshot,
@@ -19,6 +20,17 @@ import {
 } from 'firebase/firestore';
 import { db, getDb, auth } from '../config/firebase.js';
 import { calculateAccountHistory } from '../utils/calculations.js';
+import {
+  putItem,
+  getItem,
+  deleteItem,
+  getItemsByUserId,
+  putItems,
+  enqueueSyncOperation,
+  generateLocalId,
+  clearUserDataLocally
+} from './local-db.js';
+import { syncPendingOperations } from './sync-engine.js';
 
 function firestoreDb() {
   return db || getDb();
@@ -31,7 +43,8 @@ export async function createUserProfile(uid, data) {
   const name = (data && data.name) ? String(data.name).trim() : 'User';
   const email = (data && data.email) ? String(data.email).trim() : '';
 
-  await setDoc(doc(firestoreDb(), 'users', uid), {
+  const profileData = {
+    uid,
     name: name,
     email: email,
     createdAt: (data && data.createdAt) ? data.createdAt : new Date().toISOString(),
@@ -44,25 +57,114 @@ export async function createUserProfile(uid, data) {
       lowBalanceThreshold: 500,
       allowNegativeBalance: false
     }
-  }, { merge: true });
+  };
+
+  // 1. Save to localStorage for instant synchronous recovery
+  try {
+    localStorage.setItem(`mc_profile_${uid}`, JSON.stringify(profileData));
+  } catch (e) {}
+
+  // 2. Save to local IndexedDB immediately
+  await putItem('users', profileData);
+
+  // 3. Queue sync operation
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'profile',
+    action: 'UPDATE',
+    entityId: uid,
+    payload: profileData
+  });
+
+  // 4. Sync if online
+  syncPendingOperations(false).catch(() => {});
 }
 
 export async function getUserProfile(uid) {
   if (!uid) return null;
+
+  // 1. Try localStorage first for instantaneous 0ms synchronous response
   try {
-    const docSnap = await getDoc(doc(firestoreDb(), 'users', uid));
-    if (docSnap && docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() };
+    const cachedRaw = localStorage.getItem(`mc_profile_${uid}`);
+    if (cachedRaw) {
+      const cached = JSON.parse(cachedRaw);
+      if (cached && cached.name) {
+        // Asynchronously check IndexedDB/network in background
+        getItem('users', uid).then(local => {
+          if (!local) putItem('users', cached);
+        }).catch(() => {});
+        return cached;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Try local IndexedDB
+  try {
+    const localProfile = await getItem('users', uid);
+    if (localProfile) {
+      try {
+        localStorage.setItem(`mc_profile_${uid}`, JSON.stringify(localProfile));
+      } catch (e) {}
+
+      // If online, fetch fresh profile in background without blocking UI
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        getDoc(doc(firestoreDb(), 'users', uid)).then(snap => {
+          if (snap && snap.exists()) {
+            const fresh = { uid, id: snap.id, ...snap.data() };
+            putItem('users', fresh);
+            try { localStorage.setItem(`mc_profile_${uid}`, JSON.stringify(fresh)); } catch (e) {}
+          }
+        }).catch(() => {});
+      }
+      return localProfile;
     }
   } catch (e) {
-    console.warn('getUserProfile warning:', e);
+    console.warn('[Firestore] getUserProfile local error:', e);
   }
+
+  // 3. If offline, do NOT block on network getDoc
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return null;
+  }
+
+  // 4. Fallback to Firestore if not cached locally and online
+  try {
+    const fetchPromise = getDoc(doc(firestoreDb(), 'users', uid));
+    const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 2000));
+    const docSnap = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (docSnap && docSnap.exists()) {
+      const profile = { uid, id: docSnap.id, ...docSnap.data() };
+      await putItem('users', profile);
+      try { localStorage.setItem(`mc_profile_${uid}`, JSON.stringify(profile)); } catch (e) {}
+      return profile;
+    }
+  } catch (e) {
+    console.warn('[Firestore] getUserProfile network warning:', e);
+  }
+
   return null;
 }
 
 export async function updateUserProfile(uid, data) {
   if (!uid) return;
-  await updateDoc(doc(firestoreDb(), 'users', uid), data);
+
+  const current = (await getItem('users', uid)) || { uid };
+  const updated = { ...current, ...data, updatedAt: new Date().toISOString() };
+  try {
+    localStorage.setItem(`mc_profile_${uid}`, JSON.stringify(updated));
+  } catch (e) {}
+  await putItem('users', updated);
+
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'profile',
+    action: 'UPDATE',
+    entityId: uid,
+    payload: data
+  });
+
+  syncPendingOperations(false).catch(() => {});
 }
 
 /**
@@ -70,62 +172,47 @@ export async function updateUserProfile(uid, data) {
  */
 export async function setInitialBalance(uid, amount) {
   if (!uid) return;
-  await updateDoc(doc(firestoreDb(), 'users', uid), {
-    initialBalance: Number(amount)
-  });
-  await ensureDefaultAccounts(uid, amount);
+  const numAmount = Number(amount) || 0;
+
+  await updateUserProfile(uid, { initialBalance: numAmount });
+  await ensureDefaultAccounts(uid, numAmount);
 }
 
 export async function updateUserSettings(uid, settings) {
   if (!uid) return;
   const profile = await getUserProfile(uid);
   const currentSettings = profile?.settings || {};
-  await updateDoc(doc(firestoreDb(), 'users', uid), {
-    settings: { ...currentSettings, ...settings }
-  });
+  const updatedSettings = { ...currentSettings, ...settings };
+
+  await updateUserProfile(uid, { settings: updatedSettings });
 }
 
 export async function deleteUserData(uid) {
   if (!uid) return;
-  const batch = writeBatch(firestoreDb());
 
-  // Delete all accounts
-  const accSnap = await getDocs(collection(firestoreDb(), 'users', uid, 'accounts'));
-  accSnap.forEach((d) => batch.delete(d.ref));
+  // Clear local database
+  await clearUserDataLocally(uid);
 
-  // Delete all transactions
-  const txSnap = await getDocs(collection(firestoreDb(), 'users', uid, 'transactions'));
-  txSnap.forEach((d) => batch.delete(d.ref));
+  // If online, delete in Firestore
+  try {
+    const batch = writeBatch(firestoreDb());
+    const accSnap = await getDocs(collection(firestoreDb(), 'users', uid, 'accounts')).catch(() => null);
+    if (accSnap) accSnap.forEach(d => batch.delete(d.ref));
 
-  // Delete all budgets
-  const budgetSnap = await getDocs(collection(firestoreDb(), 'users', uid, 'budgets'));
-  budgetSnap.forEach((d) => batch.delete(d.ref));
+    const txSnap = await getDocs(collection(firestoreDb(), 'users', uid, 'transactions')).catch(() => null);
+    if (txSnap) txSnap.forEach(d => batch.delete(d.ref));
 
-  // Delete user document
-  batch.delete(doc(firestoreDb(), 'users', uid));
+    const budgetSnap = await getDocs(collection(firestoreDb(), 'users', uid, 'budgets')).catch(() => null);
+    if (budgetSnap) budgetSnap.forEach(d => batch.delete(d.ref));
 
-  await batch.commit();
+    batch.delete(doc(firestoreDb(), 'users', uid));
+    await batch.commit();
+  } catch (e) {
+    console.warn('[Firestore] deleteUserData online cleanup warning:', e);
+  }
 }
 
 // ─── Accounts CRUD ──────────────────────────────
-
-/**
- * Create a new account
- */
-export async function createAccount(uid, data) {
-  if (!uid) return null;
-  const accRef = collection(firestoreDb(), 'users', uid, 'accounts');
-  const docRef = await addDoc(accRef, {
-    name: data.name.trim(),
-    type: data.type, // 'Cash' | 'Bank' | 'UPI' | 'Other'
-    initialBalance: Number(data.initialBalance) || 0,
-    bankName: (data.bankName || '').trim(),
-    last4Digits: (data.last4Digits || '').trim(),
-    icon: data.icon || getAccountTypeDefaultIcon(data.type),
-    createdAt: new Date().toISOString()
-  });
-  return docRef.id;
-}
 
 /**
  * Get default account icon
@@ -141,18 +228,69 @@ function getAccountTypeDefaultIcon(type) {
 }
 
 /**
+ * Create a new account (Local-first with persistent ID)
+ */
+export async function createAccount(uid, data) {
+  if (!uid) return null;
+  const accId = generateLocalId('acc');
+  const now = new Date().toISOString();
+
+  const account = {
+    id: accId,
+    userId: uid,
+    name: data.name.trim(),
+    type: data.type, // 'Cash' | 'Bank' | 'UPI' | 'Other'
+    initialBalance: Number(data.initialBalance) || 0,
+    bankName: (data.bankName || '').trim(),
+    last4Digits: (data.last4Digits || '').trim(),
+    icon: data.icon || getAccountTypeDefaultIcon(data.type),
+    syncStatus: 'pending',
+    createdAt: now,
+    updatedAt: now
+  };
+
+  // 1. Save to local IndexedDB
+  await putItem('accounts', account);
+
+  // 2. Queue for Firebase synchronization
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'account',
+    action: 'CREATE',
+    entityId: accId,
+    payload: account
+  });
+
+  // 3. Update in-memory state
+  if (typeof window !== 'undefined' && window.appState) {
+    window.appState.accounts = [...(window.appState.accounts || []), account];
+  }
+
+  // 4. Trigger sync in background
+  syncPendingOperations(false).catch(() => {});
+
+  return accId;
+}
+
+/**
  * Update account
  */
 export async function updateAccount(uid, accountId, data) {
   if (!uid || !accountId) return;
-  const accRef = doc(firestoreDb(), 'users', uid, 'accounts', accountId);
+
+  const localAcc = await getItem('accounts', accountId);
+  const now = new Date().toISOString();
   const updateData = {
+    ...(localAcc || {}),
+    id: accountId,
+    userId: uid,
     name: data.name.trim(),
     type: data.type,
     bankName: (data.bankName || '').trim(),
     last4Digits: (data.last4Digits || '').trim(),
     icon: data.icon || getAccountTypeDefaultIcon(data.type),
-    updatedAt: new Date().toISOString()
+    syncStatus: 'pending',
+    updatedAt: now
   };
   if (data.notes !== undefined) {
     updateData.notes = (data.notes || '').trim();
@@ -160,7 +298,25 @@ export async function updateAccount(uid, accountId, data) {
   if (data.initialBalance !== undefined) {
     updateData.initialBalance = Number(data.initialBalance) || 0;
   }
-  await updateDoc(accRef, updateData);
+
+  // Save to IndexedDB
+  await putItem('accounts', updateData);
+
+  // Queue sync
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'account',
+    action: 'UPDATE',
+    entityId: accountId,
+    payload: updateData
+  });
+
+  // Update in-memory state
+  if (typeof window !== 'undefined' && window.appState && window.appState.accounts) {
+    window.appState.accounts = window.appState.accounts.map(a => a.id === accountId ? updateData : a);
+  }
+
+  syncPendingOperations(false).catch(() => {});
 }
 
 /**
@@ -168,46 +324,114 @@ export async function updateAccount(uid, accountId, data) {
  */
 export async function deleteAccountDoc(uid, accountId) {
   if (!uid || !accountId) return;
-  await deleteDoc(doc(firestoreDb(), 'users', uid, 'accounts', accountId));
+
+  // Delete from IndexedDB
+  await deleteItem('accounts', accountId);
+
+  // Queue delete sync operation
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'account',
+    action: 'DELETE',
+    entityId: accountId,
+    payload: { id: accountId }
+  });
+
+  if (typeof window !== 'undefined' && window.appState && window.appState.accounts) {
+    window.appState.accounts = window.appState.accounts.filter(a => a.id !== accountId);
+  }
+
+  syncPendingOperations(false).catch(() => {});
 }
 
 /**
- * Get all accounts for a user
+ * Get all accounts for a user (Local-first)
  */
 export async function getAccounts(uid) {
   if (!uid) return [];
-  const accRef = collection(firestoreDb(), 'users', uid, 'accounts');
-  const q = query(accRef, orderBy('createdAt', 'asc'));
-  const snapshot = await getDocs(q);
+  const local = await getItemsByUserId('accounts', uid);
+  if (local && local.length > 0) {
+    return local.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  }
 
-  const accounts = [];
-  snapshot.forEach((doc) => {
-    accounts.push({ id: doc.id, ...doc.data() });
-  });
-  return accounts;
+  // If offline, do NOT attempt network fetch
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return local || [];
+  }
+
+  // If local is empty and online, fetch from Firestore
+  try {
+    const accRef = collection(firestoreDb(), 'users', uid, 'accounts');
+    const q = query(accRef, orderBy('createdAt', 'asc'));
+    const snapshot = await getDocs(q);
+
+    const accounts = [];
+    snapshot.forEach((d) => {
+      accounts.push({ id: d.id, userId: uid, syncStatus: 'synced', ...d.data() });
+    });
+    if (accounts.length > 0) {
+      await putItems('accounts', accounts);
+    }
+    return accounts;
+  } catch (e) {
+    return [];
+  }
 }
 
 /**
- * Subscribe to accounts in real-time
+ * Subscribe to accounts in real-time (Emits local cache immediately, then listens online)
  */
 export function subscribeToAccounts(uid, callback) {
   if (!uid) {
     callback([]);
     return () => {};
   }
-  const accRef = collection(firestoreDb(), 'users', uid, 'accounts');
-  const q = query(accRef, orderBy('createdAt', 'asc'));
 
-  return onSnapshot(q, (snapshot) => {
-    const accounts = [];
-    snapshot.forEach((doc) => {
-      accounts.push({ id: doc.id, ...doc.data() });
+  // 1. Immediately emit cached accounts from IndexedDB
+  getItemsByUserId('accounts', uid).then(localAccounts => {
+    if (localAccounts && localAccounts.length > 0) {
+      callback(localAccounts.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '')));
+    }
+  }).catch(() => {});
+
+  // 2. Set up Firestore onSnapshot for real-time remote updates
+  let unsubscribeFirestore = () => {};
+  try {
+    const accRef = collection(firestoreDb(), 'users', uid, 'accounts');
+    const q = query(accRef, orderBy('createdAt', 'asc'));
+
+    unsubscribeFirestore = onSnapshot(q, async (snapshot) => {
+      const serverAccounts = [];
+      snapshot.forEach((doc) => {
+        serverAccounts.push({ id: doc.id, userId: uid, syncStatus: 'synced', ...doc.data() });
+      });
+
+      // Merge with pending local accounts so unsynced accounts are not lost
+      const localAccs = await getItemsByUserId('accounts', uid).catch(() => []);
+      const pendingAccs = localAccs.filter(a => a.syncStatus === 'pending');
+      const mergedMap = new Map();
+
+      serverAccounts.forEach(a => mergedMap.set(a.id, a));
+      pendingAccs.forEach(a => mergedMap.set(a.id, a));
+
+      const merged = Array.from(mergedMap.values()).sort((a, b) =>
+        (a.createdAt || '').localeCompare(b.createdAt || '')
+      );
+
+      await putItems('accounts', merged).catch(() => {});
+      callback(merged);
+    }, (error) => {
+      console.warn('[Firestore] Account subscription offline/error:', error);
+      // Fall back to local accounts
+      getItemsByUserId('accounts', uid).then(callback).catch(() => callback([]));
     });
-    callback(accounts);
-  }, (error) => {
-    console.error('Account subscription error:', error);
-    callback([], error);
-  });
+  } catch (e) {
+    console.warn('[Firestore] subscribeToAccounts setup warning:', e);
+  }
+
+  return () => {
+    unsubscribeFirestore();
+  };
 }
 
 /**
@@ -230,6 +454,8 @@ export async function ensureDefaultAccounts(uid, initialBalance = 0) {
 
 /**
  * Add a new transaction (INCOME, EXPENSE, TRANSFER)
+ * Local-first: Saves to IndexedDB immediately, updates balance instantly,
+ * and queues for idempotent Firebase synchronization.
  */
 export async function addTransaction(uid, data) {
   if (!uid) return null;
@@ -240,20 +466,23 @@ export async function addTransaction(uid, data) {
   }
 
   const accounts = await getAccounts(uid);
-  const txSnap = await getDocs(query(collection(firestoreDb(), 'users', uid, 'transactions'), orderBy('createdAt', 'asc')));
-  const existingTx = [];
-  txSnap.forEach(d => existingTx.push({ id: d.id, ...d.data() }));
+  const existingTx = await getItemsByUserId('transactions', uid);
 
   const amount = Number(data.amount);
-  const txRef = collection(firestoreDb(), 'users', uid, 'transactions');
+  const txId = generateLocalId('tx');
+  const nowIso = data.createdAt || now.toISOString();
+
   const txData = {
+    id: txId,
+    userId: uid,
     type: data.type, // 'INCOME' | 'EXPENSE' | 'TRANSFER'
     amount: amount,
     date: data.date,
     reason: (data.reason || '').trim(),
     category: data.category || (data.type === 'TRANSFER' ? 'Transfer' : 'Other'),
     notes: (data.notes || '').trim(),
-    createdAt: data.createdAt || new Date().toISOString()
+    syncStatus: 'pending',
+    createdAt: nowIso
   };
 
   if (data.type === 'INCOME') {
@@ -289,58 +518,98 @@ export async function addTransaction(uid, data) {
     }
   }
 
-  const docRef = await addDoc(txRef, txData);
-  return docRef.id;
+  // 1. Store in IndexedDB immediately
+  await putItem('transactions', txData);
+
+  // 2. Queue for Firebase synchronization
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'transaction',
+    action: 'CREATE',
+    entityId: txId,
+    payload: txData
+  });
+
+  // 3. Update in-memory state immediately so UI updates with zero delay
+  if (typeof window !== 'undefined' && window.appState) {
+    window.appState.transactions = [txData, ...(window.appState.transactions || [])];
+  }
+
+  // 4. Trigger synchronization in background if online
+  syncPendingOperations(false).catch(() => {});
+
+  return txId;
 }
 
 /**
- * Update transaction
+ * Update transaction (Unprotected fields or local edit)
  */
 export async function updateTransaction(uid, txId, data) {
   if (!uid || !txId) return;
-  const txRef = doc(firestoreDb(), 'users', uid, 'transactions', txId);
-  const txData = {
-    amount: Number(data.amount),
-    date: data.date,
-    reason: (data.reason || '').trim(),
-    category: data.category || (data.type === 'TRANSFER' ? 'Transfer' : 'Other'),
-    notes: (data.notes || '').trim(),
-    updatedAt: new Date().toISOString()
+
+  const existing = await getItem('transactions', txId);
+  const nowIso = new Date().toISOString();
+
+  const updatedTx = {
+    ...(existing || {}),
+    id: txId,
+    userId: uid,
+    amount: Number(data.amount !== undefined ? data.amount : existing?.amount || 0),
+    date: data.date || existing?.date,
+    reason: data.reason !== undefined ? String(data.reason).trim() : existing?.reason,
+    category: data.category !== undefined ? data.category : existing?.category,
+    notes: data.notes !== undefined ? String(data.notes).trim() : existing?.notes,
+    syncStatus: 'pending',
+    updatedAt: nowIso,
+    baseUpdatedAt: existing?.updatedAt || existing?.createdAt || nowIso
   };
 
-  if (data.type !== undefined) txData.type = data.type;
-  if (data.sourceAccountId !== undefined) txData.sourceAccountId = data.sourceAccountId;
-  if (data.destinationAccountId !== undefined) txData.destinationAccountId = data.destinationAccountId;
+  if (data.type !== undefined) updatedTx.type = data.type;
+  if (data.sourceAccountId !== undefined) updatedTx.sourceAccountId = data.sourceAccountId;
+  if (data.destinationAccountId !== undefined) updatedTx.destinationAccountId = data.destinationAccountId;
 
-  await updateDoc(txRef, txData);
+  // 1. Save to IndexedDB immediately
+  await putItem('transactions', updatedTx);
+
+  // 2. Queue for synchronization
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'transaction',
+    action: 'UPDATE',
+    entityId: txId,
+    payload: updatedTx
+  });
+
+  // 3. Update in-memory state
+  if (typeof window !== 'undefined' && window.appState && window.appState.transactions) {
+    window.appState.transactions = window.appState.transactions.map(t => t.id === txId ? updatedTx : t);
+  }
+
+  syncPendingOperations(false).catch(() => {});
 }
 
 /**
- * Update a transaction with full balance recalculation (for OTP-verified corrections).
- * This function handles the case where amount, account, date, or type changes.
- * Since balances are calculated by scanning all transactions (calculateAccountBalance),
- * we simply need to update the transaction document with correct data.
- * The balance recalculation happens automatically via the real-time subscription
- * and calculateAccountBalance in calculations.js.
- *
- * @param {string} uid - User UID
- * @param {string} txId - Transaction ID
- * @param {Object} originalTx - The original transaction data (snapshot before edit)
- * @param {Object} correctedData - The corrected fields
- * @returns {Promise<void>}
+ * Update transaction with correction (OTP verified protected fields)
  */
 export async function updateTransactionWithCorrection(uid, txId, originalTx, correctedData) {
   if (!uid || !txId) return;
-  const txRef = doc(firestoreDb(), 'users', uid, 'transactions', txId);
 
-  const txData = {
+  const existing = await getItem('transactions', txId);
+  const nowIso = new Date().toISOString();
+
+  const updatedTx = {
+    ...(existing || {}),
+    id: txId,
+    userId: uid,
     amount: Number(correctedData.amount),
     date: correctedData.date,
     reason: (correctedData.reason || '').trim(),
     category: correctedData.category || (correctedData.type === 'TRANSFER' ? 'Transfer' : 'Other'),
     notes: correctedData.notes !== undefined ? (correctedData.notes || '').trim() : (originalTx.notes || '').trim(),
-    updatedAt: new Date().toISOString(),
-    correctedAt: new Date().toISOString(),
+    syncStatus: 'pending',
+    updatedAt: nowIso,
+    correctedAt: nowIso,
+    baseUpdatedAt: existing?.updatedAt || existing?.createdAt || nowIso,
     correctedFrom: {
       amount: originalTx.amount,
       date: originalTx.date,
@@ -351,66 +620,137 @@ export async function updateTransactionWithCorrection(uid, txId, originalTx, cor
     }
   };
 
-  // Update type and cleanly assign account IDs
   const targetType = correctedData.type || originalTx.type;
-  txData.type = targetType;
+  updatedTx.type = targetType;
 
   if (targetType === 'INCOME') {
     if (correctedData.destinationAccountId !== undefined) {
-      txData.destinationAccountId = correctedData.destinationAccountId;
+      updatedTx.destinationAccountId = correctedData.destinationAccountId;
     }
-    txData.sourceAccountId = deleteField();
+    delete updatedTx.sourceAccountId;
   } else if (targetType === 'EXPENSE') {
     if (correctedData.sourceAccountId !== undefined) {
-      txData.sourceAccountId = correctedData.sourceAccountId;
+      updatedTx.sourceAccountId = correctedData.sourceAccountId;
     }
-    txData.destinationAccountId = deleteField();
+    delete updatedTx.destinationAccountId;
   } else if (targetType === 'TRANSFER') {
     if (correctedData.sourceAccountId !== undefined) {
-      txData.sourceAccountId = correctedData.sourceAccountId;
+      updatedTx.sourceAccountId = correctedData.sourceAccountId;
     }
     if (correctedData.destinationAccountId !== undefined) {
-      txData.destinationAccountId = correctedData.destinationAccountId;
+      updatedTx.destinationAccountId = correctedData.destinationAccountId;
     }
   }
 
-  // Preserve the original createdAt time for ordering
   if (correctedData.createdAt) {
-    txData.createdAt = correctedData.createdAt;
+    updatedTx.createdAt = correctedData.createdAt;
   }
 
-  await updateDoc(txRef, txData);
+  // 1. Save to local IndexedDB
+  await putItem('transactions', updatedTx);
+
+  // 2. Queue sync operation
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'transaction',
+    action: 'UPDATE',
+    entityId: txId,
+    payload: updatedTx
+  });
+
+  // 3. Update in-memory state
+  if (typeof window !== 'undefined' && window.appState && window.appState.transactions) {
+    window.appState.transactions = window.appState.transactions.map(t => t.id === txId ? updatedTx : t);
+  }
+
+  syncPendingOperations(false).catch(() => {});
 }
 
 /**
- * Delete transaction
+ * Delete transaction (Local-first with safe queueing)
  */
 export async function deleteTransaction(uid, txId) {
   if (!uid || !txId) return;
-  await deleteDoc(doc(firestoreDb(), 'users', uid, 'transactions', txId));
+
+  // Remove from IndexedDB
+  await deleteItem('transactions', txId);
+
+  // Queue delete sync operation
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'transaction',
+    action: 'DELETE',
+    entityId: txId,
+    payload: { id: txId }
+  });
+
+  if (typeof window !== 'undefined' && window.appState && window.appState.transactions) {
+    window.appState.transactions = window.appState.transactions.filter(t => t.id !== txId);
+  }
+
+  syncPendingOperations(false).catch(() => {});
 }
 
 /**
- * Subscribe to real-time transaction updates
+ * Subscribe to real-time transaction updates (Local-first instant load)
  */
 export function subscribeToTransactions(uid, callback) {
   if (!uid) {
     callback([]);
     return () => {};
   }
-  const txRef = collection(firestoreDb(), 'users', uid, 'transactions');
-  const q = query(txRef, orderBy('createdAt', 'desc'));
 
-  return onSnapshot(q, (snapshot) => {
-    const transactions = [];
-    snapshot.forEach((doc) => {
-      transactions.push({ id: doc.id, ...doc.data() });
+  // 1. Immediately emit transactions from IndexedDB
+  getItemsByUserId('transactions', uid).then(localTx => {
+    if (localTx && localTx.length > 0) {
+      const sorted = localTx.sort((a, b) => {
+        const dateCmp = (b.date || '').localeCompare(a.date || '');
+        if (dateCmp !== 0) return dateCmp;
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      });
+      callback(sorted);
+    }
+  }).catch(() => {});
+
+  // 2. Remote Firestore onSnapshot listener
+  let unsubscribeFirestore = () => {};
+  try {
+    const txRef = collection(firestoreDb(), 'users', uid, 'transactions');
+    const q = query(txRef, orderBy('createdAt', 'desc'));
+
+    unsubscribeFirestore = onSnapshot(q, async (snapshot) => {
+      const serverTx = [];
+      snapshot.forEach((doc) => {
+        serverTx.push({ id: doc.id, userId: uid, syncStatus: 'synced', ...doc.data() });
+      });
+
+      // Merge with pending local transactions so unsynced offline records are preserved
+      const localList = await getItemsByUserId('transactions', uid).catch(() => []);
+      const pendingList = localList.filter(t => t.syncStatus === 'pending' || t.syncStatus === 'syncing');
+      const txMap = new Map();
+
+      serverTx.forEach(t => txMap.set(t.id, t));
+      pendingList.forEach(t => txMap.set(t.id, t)); // preserve pending
+
+      const merged = Array.from(txMap.values()).sort((a, b) => {
+        const dateCmp = (b.date || '').localeCompare(a.date || '');
+        if (dateCmp !== 0) return dateCmp;
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      });
+
+      await putItems('transactions', merged).catch(() => {});
+      callback(merged);
+    }, (error) => {
+      console.warn('[Firestore] Transaction subscription offline/error:', error);
+      getItemsByUserId('transactions', uid).then(callback).catch(() => callback([]));
     });
-    callback(transactions);
-  }, (error) => {
-    console.error('Transaction subscription error:', error);
-    callback([], error);
-  });
+  } catch (e) {
+    console.warn('[Firestore] subscribeToTransactions setup warning:', e);
+  }
+
+  return () => {
+    unsubscribeFirestore();
+  };
 }
 
 // ─── Budgets CRUD ──────────────────────────────
@@ -418,42 +758,63 @@ export function subscribeToTransactions(uid, callback) {
 export async function setBudget(uid, budgetData) {
   if (!uid) return;
   const budgetId = budgetData.category || 'monthly';
-  await setDoc(doc(firestoreDb(), 'users', uid, 'budgets', budgetId), {
+  const payload = {
+    id: budgetId,
+    userId: uid,
     category: budgetData.category || 'monthly',
     amount: Number(budgetData.amount),
     month: budgetData.month,
     updatedAt: new Date().toISOString()
+  };
+
+  await putItem('budgets', payload);
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'budget',
+    action: 'CREATE',
+    entityId: budgetId,
+    payload
   });
+
+  syncPendingOperations(false).catch(() => {});
 }
 
 export async function getBudgets(uid) {
   if (!uid) return [];
-  const budgetRef = collection(firestoreDb(), 'users', uid, 'budgets');
-  const snapshot = await getDocs(budgetRef);
+  const local = await getItemsByUserId('budgets', uid);
+  if (local && local.length > 0) return local;
 
-  const budgets = [];
-  snapshot.forEach((doc) => {
-    budgets.push({ id: doc.id, ...doc.data() });
-  });
-  return budgets;
+  // If offline, do NOT attempt network fetch
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return local || [];
+  }
+
+  try {
+    const budgetRef = collection(firestoreDb(), 'users', uid, 'budgets');
+    const snapshot = await getDocs(budgetRef);
+
+    const budgets = [];
+    snapshot.forEach((doc) => {
+      budgets.push({ id: doc.id, userId: uid, ...doc.data() });
+    });
+    if (budgets.length > 0) {
+      await putItems('budgets', budgets);
+    }
+    return budgets;
+  } catch (e) {
+    return [];
+  }
 }
 
 export async function deleteBudget(uid, budgetId) {
-  if (!uid || !budgetId) {
-    throw new Error('User ID and Budget ID are required.');
-  }
-  const authUser = auth.currentUser;
-  if (!authUser || authUser.uid !== uid) {
-    const err = new Error('You do not have permission to delete this budget.');
-    err.code = 'permission-denied';
-    throw err;
-  }
-  const budgetRef = doc(firestoreDb(), 'users', uid, 'budgets', budgetId);
-  const budgetSnap = await getDoc(budgetRef);
-  if (!budgetSnap.exists()) {
-    const err = new Error('Budget not found or already deleted.');
-    err.code = 'not-found';
-    throw err;
-  }
-  await deleteDoc(budgetRef);
+  if (!uid || !budgetId) return;
+  await deleteItem('budgets', budgetId);
+  await enqueueSyncOperation({
+    userId: uid,
+    entityType: 'budget',
+    action: 'DELETE',
+    entityId: budgetId,
+    payload: { id: budgetId }
+  });
+  syncPendingOperations(false).catch(() => {});
 }
