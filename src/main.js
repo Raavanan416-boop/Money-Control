@@ -15,6 +15,7 @@ import { getUserBudgets } from './services/budget.js';
 import { initPWA } from './services/pwa.js';
 import { initSyncEngine } from './services/sync-engine.js';
 import { getPinData } from './services/pin.js';
+import { getItemsByUserId, openLocalDB } from './services/local-db.js';
 import {
   showPinSetupPrompt,
   showPinLockScreen,
@@ -93,6 +94,13 @@ function initTheme() {
 }
 
 initTheme();
+
+// Pre-initialize IndexedDB so it's ready before any data operations
+try {
+  openLocalDB().catch(e => console.warn('IndexedDB pre-init warning:', e));
+} catch (e) {
+  console.warn('IndexedDB pre-init warning:', e);
+}
 
 // Initialize PWA
 try {
@@ -273,37 +281,75 @@ function init() {
 }
 
 /**
- * Load user data, accounts, budgets, & real-time subscriptions
+ * Load user data, accounts, budgets, & real-time subscriptions.
+ * Offline-first: pre-loads all data from IndexedDB before Firebase.
  */
 async function loadUserData(uid) {
   appState.dashboardError = null;
+  const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
   try {
-    const profileTimeout = new Promise((resolve) => setTimeout(() => resolve(null), 1500));
+    // ── 1. Pre-load data from IndexedDB for instant offline rendering ──────
+    // This ensures the UI has something to show even before Firebase responds.
+    try {
+      const [localAccounts, localTransactions, localFriendMoney, localBudgets] = await Promise.all([
+        getItemsByUserId('accounts', uid).catch(() => []),
+        getItemsByUserId('transactions', uid).catch(() => []),
+        getItemsByUserId('friendMoney', uid).catch(() => []),
+        getItemsByUserId('budgets', uid).catch(() => [])
+      ]);
+
+      if (localAccounts.length > 0) {
+        appState.accounts = localAccounts.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      }
+      if (localTransactions.length > 0) {
+        appState.transactions = localTransactions.sort((a, b) => {
+          const dateCmp = (b.date || '').localeCompare(a.date || '');
+          if (dateCmp !== 0) return dateCmp;
+          return (b.createdAt || '').localeCompare(a.createdAt || '');
+        });
+      }
+      if (localFriendMoney.length > 0) {
+        appState.friendMoneyRecords = localFriendMoney.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      }
+      if (localBudgets.length > 0) {
+        appState.budgets = localBudgets;
+      }
+    } catch (e) {
+      console.warn('[loadUserData] IndexedDB pre-load warning:', e);
+    }
+
+    // ── 2. Load profile (localStorage → IndexedDB → Firestore) ─────────────
+    const profileTimeout = new Promise((resolve) => setTimeout(() => resolve(null), isOffline ? 500 : 1500));
     let profile = await Promise.race([getUserProfile(uid), profileTimeout]);
 
     // Check existing accounts locally
-    const existingAccounts = await getAccounts(uid).catch(() => []);
+    const existingAccounts = await getAccounts(uid).catch(() => appState.accounts || []);
 
     // Safely auto-create user profile if missing or timed out
     if (!profile) {
       const fallbackName = appState.user?.displayName || appState.user?.email?.split('@')[0] || 'User';
-      try {
-        await createUserProfile(uid, {
-          name: fallbackName,
-          email: appState.user?.email || '',
-          createdAt: new Date().toISOString()
-        });
-        profile = await getUserProfile(uid);
-      } catch (e) {
-        console.warn('Profile creation fallback:', e);
+      if (!isOffline) {
+        try {
+          await createUserProfile(uid, {
+            name: fallbackName,
+            email: appState.user?.email || '',
+            createdAt: new Date().toISOString()
+          });
+          profile = await getUserProfile(uid);
+        } catch (e) {
+          console.warn('Profile creation fallback:', e);
+          profile = { name: fallbackName, email: appState.user?.email || '', initialBalance: 0 };
+        }
+      } else {
+        // Offline with no cached profile — construct minimal profile from cached auth
         profile = { name: fallbackName, email: appState.user?.email || '', initialBalance: 0 };
       }
     }
 
     // If profile has no initialBalance, but user already has accounts, they completed onboarding!
     if (profile && (profile.initialBalance === null || profile.initialBalance === undefined)) {
-      if (existingAccounts && existingAccounts.length > 0) {
+      if ((existingAccounts && existingAccounts.length > 0) || (appState.accounts && appState.accounts.length > 0)) {
         profile.initialBalance = 0;
       }
     }
@@ -311,23 +357,36 @@ async function loadUserData(uid) {
     appState.profile = profile;
 
     // Check if onboarding is needed (only if user has NO accounts and NO initial balance)
-    if ((!profile || profile.initialBalance === null || profile.initialBalance === undefined) && (!existingAccounts || existingAccounts.length === 0)) {
-      renderOnboardingView();
-      return;
+    // When offline, if we have cached data, skip onboarding entirely
+    const hasLocalData = (appState.accounts && appState.accounts.length > 0) || (appState.transactions && appState.transactions.length > 0);
+    if ((!profile || profile.initialBalance === null || profile.initialBalance === undefined) && (!existingAccounts || existingAccounts.length === 0) && !hasLocalData) {
+      if (isOffline) {
+        // Can't onboard offline — show the app layout with whatever data is available
+        profile = profile || { name: 'User', email: '', initialBalance: 0 };
+        profile.initialBalance = 0;
+        appState.profile = profile;
+      } else {
+        renderOnboardingView();
+        return;
+      }
     }
 
-    // Ensure default Cash account exists
+    // Ensure default Cash account exists (non-blocking when offline)
     try {
       await ensureDefaultAccounts(uid, profile.initialBalance || 0);
     } catch (e) {
       console.warn('ensureDefaultAccounts warning:', e);
     }
 
-    // Load Budgets
+    // Load Budgets (already pre-loaded from IndexedDB above, refresh if online)
     try {
-      appState.budgets = await getUserBudgets(uid);
+      const freshBudgets = await getUserBudgets(uid);
+      if (freshBudgets && freshBudgets.length > 0) {
+        appState.budgets = freshBudgets;
+      }
     } catch (e) {
-      appState.budgets = [];
+      // Keep whatever was pre-loaded from IndexedDB
+      if (!appState.budgets) appState.budgets = [];
     }
 
     // Load PIN data
@@ -346,42 +405,57 @@ async function loadUserData(uid) {
     appState.biometricCredentialId = pinData.biometricCredentialId || null;
     appState.hideBalance = pinData.hideBalance || false;
 
-    // Subscribe to Accounts in real-time
-    appState.unsubscribeAccounts = subscribeToAccounts(uid, (accounts, error) => {
-      if (error) {
-        console.error('Accounts subscription error:', error);
-        appState.dashboardError = error;
-      } else {
-        appState.accounts = accounts;
-      }
-      if (!appState.isLocked) {
-        renderAppLayout();
-      }
-    });
+    // ── 3. Subscribe to real-time data (Firebase listeners + IndexedDB) ────
+    // These subscriptions already emit cached IndexedDB data immediately,
+    // then switch to Firestore onSnapshot when online.
+    try {
+      appState.unsubscribeAccounts = subscribeToAccounts(uid, (accounts, error) => {
+        if (error) {
+          console.error('Accounts subscription error:', error);
+          // Don't set dashboardError for expected offline errors
+          if (navigator.onLine) {
+            appState.dashboardError = error;
+          }
+        } else {
+          appState.accounts = accounts;
+        }
+        if (!appState.isLocked) {
+          renderAppLayout();
+        }
+      });
+    } catch (e) {
+      console.warn('[loadUserData] Accounts subscription setup failed:', e);
+    }
 
-    // Subscribe to Transactions in real-time
-    appState.unsubscribeTx = subscribeToTransactions(uid, (transactions, error) => {
-      if (error) {
-        console.error('Transactions subscription error:', error);
-      } else {
-        appState.transactions = transactions;
-      }
-      if (!appState.isLocked) {
-        renderAppLayout();
-      }
-    });
+    try {
+      appState.unsubscribeTx = subscribeToTransactions(uid, (transactions, error) => {
+        if (error) {
+          console.error('Transactions subscription error:', error);
+        } else {
+          appState.transactions = transactions;
+        }
+        if (!appState.isLocked) {
+          renderAppLayout();
+        }
+      });
+    } catch (e) {
+      console.warn('[loadUserData] Transactions subscription setup failed:', e);
+    }
 
-    // Subscribe to Friend Money records in real-time
-    appState.unsubscribeFriendMoney = subscribeFriendMoney(uid, (records, error) => {
-      if (error) {
-        console.error('Friend money subscription error:', error);
-      } else {
-        appState.friendMoneyRecords = records;
-      }
-      if (!appState.isLocked) {
-        renderAppLayout();
-      }
-    });
+    try {
+      appState.unsubscribeFriendMoney = subscribeFriendMoney(uid, (records, error) => {
+        if (error) {
+          console.error('Friend money subscription error:', error);
+        } else {
+          appState.friendMoneyRecords = records;
+        }
+        if (!appState.isLocked) {
+          renderAppLayout();
+        }
+      });
+    } catch (e) {
+      console.warn('[loadUserData] Friend money subscription setup failed:', e);
+    }
 
     // Handle PIN lock flow
     if (appState.pinEnabled && appState.pinHash) {
@@ -393,8 +467,8 @@ async function loadUserData(uid) {
         startAutoLockTimer();
         renderAppLayout();
       }, appState.biometricEnabled, appState.biometricCredentialId);
-    } else if (!pinData.pinSetupPromptShown) {
-      // First time — show PIN setup prompt
+    } else if (!pinData.pinSetupPromptShown && !isOffline) {
+      // First time — show PIN setup prompt (skip when offline)
       showPinSetupPrompt(uid, () => {
         // Re-fetch PIN data after setup
         getPinData(uid).then(newPinData => {
@@ -404,7 +478,7 @@ async function loadUserData(uid) {
             startAutoLockTimer();
           }
           renderAppLayout();
-        });
+        }).catch(() => renderAppLayout());
       });
     } else {
       // No PIN — start normally and render layout immediately
@@ -414,8 +488,14 @@ async function loadUserData(uid) {
     }
   } catch (err) {
     console.error('loadUserData error:', err);
-    appState.dashboardError = err;
-    renderAppLayout();
+    // If we have any cached data at all, render the app layout anyway
+    if (appState.accounts?.length > 0 || appState.transactions?.length > 0) {
+      appState.dashboardError = null; // Don't show error if we have cached data
+      renderAppLayout();
+    } else {
+      appState.dashboardError = err;
+      renderAppLayout();
+    }
   }
 }
 
@@ -503,17 +583,32 @@ function renderCurrentPage(page) {
 function attachCurrentPageListeners(page) {
   const refreshFn = async () => {
     if (appState.user) {
-      appState.profile = await getUserProfile(appState.user.uid);
-      appState.budgets = await getUserBudgets(appState.user.uid);
+      try {
+        const profile = await getUserProfile(appState.user.uid);
+        if (profile) appState.profile = profile;
+      } catch (e) {
+        console.warn('[refreshFn] Profile refresh warning:', e);
+      }
+
+      try {
+        const budgets = await getUserBudgets(appState.user.uid);
+        if (budgets) appState.budgets = budgets;
+      } catch (e) {
+        console.warn('[refreshFn] Budgets refresh warning:', e);
+      }
 
       // Re-fetch PIN data
-      const pinData = await getPinData(appState.user.uid);
-      appState.pinEnabled = pinData.pinEnabled;
-      appState.pinHash = pinData.pinHash;
-      appState.autoLockTimeout = pinData.autoLockTimeout !== undefined ? pinData.autoLockTimeout : 5;
-      appState.biometricEnabled = pinData.biometricEnabled || false;
-      appState.biometricCredentialId = pinData.biometricCredentialId || null;
-      appState.hideBalance = pinData.hideBalance || false;
+      try {
+        const pinData = await getPinData(appState.user.uid);
+        appState.pinEnabled = pinData.pinEnabled;
+        appState.pinHash = pinData.pinHash;
+        appState.autoLockTimeout = pinData.autoLockTimeout !== undefined ? pinData.autoLockTimeout : 5;
+        appState.biometricEnabled = pinData.biometricEnabled || false;
+        appState.biometricCredentialId = pinData.biometricCredentialId || null;
+        appState.hideBalance = pinData.hideBalance || false;
+      } catch (e) {
+        console.warn('[refreshFn] PIN data refresh warning:', e);
+      }
 
       renderAppLayout();
     }
@@ -712,6 +807,31 @@ function openAddMenuModal() {
     }
   });
 }
+
+// ── Global error handlers ────────────────────────────────────────────────────
+// Catch unhandled promise rejections (e.g. Firebase network errors when offline)
+// so the app doesn't crash or show a blank screen.
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  // Suppress expected Firebase/network errors when offline
+  if (reason && typeof reason === 'object') {
+    const msg = String(reason.message || reason.code || '');
+    if (
+      msg.includes('Failed to get document because the client is offline') ||
+      msg.includes('network-request-failed') ||
+      msg.includes('unavailable') ||
+      msg.includes('UNAVAILABLE') ||
+      msg.includes('Could not reach Cloud Firestore') ||
+      msg.includes('Connection failed') ||
+      msg.includes('Failed to fetch')
+    ) {
+      console.warn('[Offline] Suppressed expected network error:', msg);
+      event.preventDefault();
+      return;
+    }
+  }
+  console.error('[Unhandled Rejection]', reason);
+});
 
 // Start application
 init();

@@ -23,6 +23,27 @@ function serviceWorkerVersionPlugin() {
       if (fs.existsSync(swOut)) {
         let content = fs.readFileSync(swOut, 'utf-8');
         content = content.replaceAll('__BUILD_VERSION__', BUILD_VERSION);
+
+        // Discover hashed asset files in dist/assets/ and inject them as
+        // additional pre-cache URLs. This ensures all JS/CSS bundles are
+        // cached at SW install time for reliable offline startup.
+        const assetsDir = path.resolve('dist', 'assets');
+        if (fs.existsSync(assetsDir)) {
+          const assetFiles = fs.readdirSync(assetsDir)
+            .filter(f => /\.(js|css)$/.test(f))
+            .map(f => `/assets/${f}`);
+
+          if (assetFiles.length > 0) {
+            // Inject asset URLs into the STATIC_ASSETS array
+            const assetEntries = assetFiles.map(f => `  '${f}'`).join(',\n');
+            content = content.replace(
+              "'/icon-512.png'\n];",
+              `'/icon-512.png',\n${assetEntries}\n];`
+            );
+            console.log(`[sw-version-inject] Injected ${assetFiles.length} bundle assets into dist/sw.js pre-cache list`);
+          }
+        }
+
         fs.writeFileSync(swOut, content, 'utf-8');
         console.log(`[sw-version-inject] Injected BUILD_VERSION=${BUILD_VERSION} into dist/sw.js`);
       }

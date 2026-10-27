@@ -400,6 +400,11 @@ export function openTransactionEditModal(tx, { onSaveSuccess, state }) {
     // Send OTP
     if (sendBtn) {
       sendBtn.onclick = async () => {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          toast.error('Internet connection is required to receive the Gmail verification OTP for editing protected fields.');
+          return;
+        }
+
         sendBtn.disabled = true;
         sendBtn.innerHTML = '<span class="spinner"></span> Sending OTP...';
 

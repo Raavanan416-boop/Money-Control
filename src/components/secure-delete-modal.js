@@ -202,6 +202,11 @@ export function requestSecureDelete({
       continueBtn.onclick = async () => {
         if (!input || input.value !== itemName) return;
 
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          toast.error('Internet connection is required to receive the Gmail verification OTP for deletion.');
+          return;
+        }
+
         continueBtn.disabled = true;
         continueBtn.innerHTML = '<span class="spinner"></span> Sending OTP...';
 
